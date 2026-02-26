@@ -1,0 +1,146 @@
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import TeamSelector from '../components/TeamSelector.vue'
+import RichEditor from '../components/RichEditor.vue'
+import CalendarPicker from '../components/CalendarPicker.vue'
+import FileUploader from '../components/FileUploader.vue'
+import ReportPreview from '../components/ReportPreview.vue'
+import { getReport, updateReport, uploadAttachment } from '../api'
+
+const route = useRoute()
+const router = useRouter()
+
+const reportId = ref(0)
+const teamId = ref(0)
+const content = ref('')
+const reportDate = ref('')
+const showPreview = ref(false)
+const saving = ref(false)
+const loading = ref(true)
+const errorMsg = ref('')
+const fileUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null)
+
+onMounted(async () => {
+  reportId.value = Number(route.params.id)
+  try {
+    const res = await getReport(reportId.value)
+    teamId.value = res.data.team_id
+    content.value = res.data.content_html
+    reportDate.value = res.data.report_date
+  } catch (e: any) {
+    errorMsg.value = e.response?.data?.message || 'Failed to load report.'
+  } finally {
+    loading.value = false
+  }
+})
+
+async function handleSave() {
+  if (!teamId.value) {
+    errorMsg.value = 'Please select a team.'
+    return
+  }
+  if (!content.value || content.value === '<p></p>') {
+    errorMsg.value = 'Please write report content.'
+    return
+  }
+
+  saving.value = true
+  errorMsg.value = ''
+
+  try {
+    await updateReport(reportId.value, {
+      team_id: teamId.value,
+      content_html: content.value,
+      report_date: reportDate.value,
+    })
+
+    if (fileUploaderRef.value && fileUploaderRef.value.files.length > 0) {
+      for (const file of fileUploaderRef.value.files) {
+        await uploadAttachment(reportId.value, file)
+      }
+    }
+
+    router.push('/my-reports')
+  } catch (e: any) {
+    errorMsg.value = e.response?.data?.message || e.message || 'Failed to update report.'
+  } finally {
+    saving.value = false
+  }
+}
+</script>
+
+<template>
+  <div class="report-edit">
+    <h2 class="metro-section__title">Edit Report</h2>
+
+    <div v-if="loading" class="metro-loading">Loading...</div>
+
+    <div v-else class="report-edit__form">
+      <div class="report-edit__top">
+        <TeamSelector v-model="teamId" />
+        <CalendarPicker v-model="reportDate" />
+      </div>
+
+      <div class="report-edit__editor">
+        <label class="metro-label">Content</label>
+        <RichEditor v-model="content" />
+      </div>
+
+      <FileUploader ref="fileUploaderRef" :report-id="reportId" />
+
+      <div v-if="errorMsg" class="report-edit__error">{{ errorMsg }}</div>
+
+      <div class="metro-btn-group">
+        <button
+          type="button"
+          class="metro-btn metro-btn--outline"
+          @click="showPreview = true"
+        >
+          Preview
+        </button>
+        <button
+          type="button"
+          class="metro-btn metro-btn--green"
+          :disabled="saving"
+          @click="handleSave"
+        >
+          {{ saving ? 'Saving...' : 'Save' }}
+        </button>
+        <button
+          type="button"
+          class="metro-btn metro-btn--blue"
+          @click="router.push('/my-reports')"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+
+    <ReportPreview
+      :content="content"
+      :visible="showPreview"
+      @close="showPreview = false"
+    />
+  </div>
+</template>
+
+<style scoped>
+.report-edit__form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.report-edit__top {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.report-edit__error {
+  color: var(--metro-orange);
+  font-size: 14px;
+  font-weight: 600;
+}
+</style>
