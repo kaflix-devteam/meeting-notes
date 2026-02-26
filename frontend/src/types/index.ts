@@ -28,6 +28,7 @@ export interface FinalReport {
   report_date: string
   content_html: string
   team_summary: Record<string, unknown> | null
+  teams?: string[]
   created_at: string
   updated_at: string
 }

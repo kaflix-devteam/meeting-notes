@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
+import Image from '@tiptap/extension-image'
+import { ClipboardImagePaste } from '../extensions/clipboardImagePaste'
 import { watch } from 'vue'
 
 const props = defineProps<{
@@ -13,7 +15,17 @@ const emit = defineEmits<{
 
 const editor = useEditor({
   content: props.modelValue,
-  extensions: [StarterKit],
+  extensions: [
+    StarterKit,
+    Image.configure({
+      inline: false,
+      allowBase64: false,
+      HTMLAttributes: {
+        class: 'rich-editor-image',
+      },
+    }),
+    ClipboardImagePaste,
+  ],
   onUpdate({ editor }) {
     emit('update:modelValue', editor.getHTML())
   },
@@ -189,5 +201,13 @@ watch(
   border: none;
   border-top: 1px solid var(--metro-border);
   margin: 16px 0;
+}
+
+.rich-editor__content :deep(.rich-editor-image) {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--metro-border);
+  border-radius: 2px;
+  margin: 8px 0;
 }
 </style>

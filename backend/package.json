@@ -5,7 +5,9 @@
   "main": "dist/app.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/app.js",
+    "build:frontend": "cd ../frontend && npm run build",
+    "build:all": "npm run build:frontend && npm run build",
+    "start": "NODE_ENV=production node dist/app.js",
     "dev": "ts-node src/app.ts"
   },
   "dependencies": {

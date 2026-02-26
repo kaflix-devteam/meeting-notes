@@ -8,7 +8,7 @@ import type {
 } from '../types'
 
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -34,10 +34,26 @@ export function updateReport(id: number, data: UpdateReportPayload) {
   return api.put<Report>(`/reports/${id}`, data)
 }
 
+export function deleteReport(id: number) {
+  return api.delete(`/reports/${id}`)
+}
+
 export function uploadAttachment(reportId: number, file: File) {
   const formData = new FormData()
   formData.append('file', file)
   return api.post(`/reports/${reportId}/attachments`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+export function uploadImage(file: File | Blob) {
+  const formData = new FormData()
+  if (file instanceof Blob && !(file instanceof File)) {
+    formData.append('image', file, 'pasted-image.png')
+  } else {
+    formData.append('image', file)
+  }
+  return api.post<{ url: string }>('/images', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }

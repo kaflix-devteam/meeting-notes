@@ -4,11 +4,15 @@ import pool from '../config/database';
 export async function getFinalReports(_req: Request, res: Response): Promise<void> {
   try {
     const result = await pool.query(
-      `SELECT id, report_date, team_summary, created_at, updated_at
+      `SELECT id, TO_CHAR(report_date, 'YYYY-MM-DD') AS report_date, team_summary, created_at, updated_at
        FROM final_reports
        ORDER BY report_date DESC`
     );
-    res.json(result.rows);
+    const rows = result.rows.map((row: any) => ({
+      ...row,
+      teams: row.team_summary ? Object.values(row.team_summary).map((t: any) => t.teamName) : [],
+    }));
+    res.json(rows);
   } catch (error) {
     console.error('[finalReportController] getFinalReports error:', error);
     res.status(500).json({ error: 'Failed to fetch final reports' });
@@ -24,7 +28,8 @@ export async function getFinalReportById(req: Request, res: Response): Promise<v
     }
 
     const result = await pool.query(
-      'SELECT * FROM final_reports WHERE id = $1',
+      `SELECT id, TO_CHAR(report_date, 'YYYY-MM-DD') AS report_date, content_html, team_summary, created_at, updated_at
+       FROM final_reports WHERE id = $1`,
       [id]
     );
 
@@ -33,7 +38,11 @@ export async function getFinalReportById(req: Request, res: Response): Promise<v
       return;
     }
 
-    res.json(result.rows[0]);
+    const row = result.rows[0];
+    res.json({
+      ...row,
+      teams: row.team_summary ? Object.values(row.team_summary).map((t: any) => t.teamName) : [],
+    });
   } catch (error) {
     console.error('[finalReportController] getFinalReportById error:', error);
     res.status(500).json({ error: 'Failed to fetch final report' });

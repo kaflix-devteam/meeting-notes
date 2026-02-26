@@ -56,4 +56,11 @@ const emit = defineEmits<{
   padding-left: 16px;
   color: var(--metro-text-light);
 }
+
+.preview-content :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--metro-border);
+  margin: 8px 0;
+}
 </style>

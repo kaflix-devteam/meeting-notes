@@ -17,6 +17,7 @@
   --metro-bg: #f3f3f3;
   --metro-text: #333333;
   --metro-text-light: #666666;
+  --metro-red: #e81123;
   --metro-border: #e0e0e0;
   --metro-hover: rgba(0, 0, 0, 0.05);
 }
@@ -71,6 +72,7 @@ h3 { font-size: 18px; }
 .metro-btn--green { background-color: var(--metro-green); }
 .metro-btn--orange { background-color: var(--metro-orange); }
 .metro-btn--purple { background-color: var(--metro-purple); }
+.metro-btn--red { background-color: var(--metro-red); }
 
 .metro-btn--outline {
   background: transparent;

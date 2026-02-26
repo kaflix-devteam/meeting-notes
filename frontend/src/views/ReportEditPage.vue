@@ -6,7 +6,7 @@ import RichEditor from '../components/RichEditor.vue'
 import CalendarPicker from '../components/CalendarPicker.vue'
 import FileUploader from '../components/FileUploader.vue'
 import ReportPreview from '../components/ReportPreview.vue'
-import { getReport, updateReport, uploadAttachment } from '../api'
+import { getReport, updateReport, uploadAttachment, deleteReport } from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +17,7 @@ const content = ref('')
 const reportDate = ref('')
 const showPreview = ref(false)
 const saving = ref(false)
+const deleting = ref(false)
 const loading = ref(true)
 const errorMsg = ref('')
 const fileUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null)
@@ -34,6 +35,22 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+async function handleDelete() {
+  if (!confirm('정말 이 보고서를 삭제하시겠습니까?')) return
+
+  deleting.value = true
+  errorMsg.value = ''
+
+  try {
+    await deleteReport(reportId.value)
+    router.push('/my-reports')
+  } catch (e: any) {
+    errorMsg.value = e.response?.data?.error || 'Failed to delete report.'
+  } finally {
+    deleting.value = false
+  }
+}
 
 async function handleSave() {
   if (!teamId.value) {
@@ -113,6 +130,14 @@ async function handleSave() {
           @click="router.push('/my-reports')"
         >
           Cancel
+        </button>
+        <button
+          type="button"
+          class="metro-btn metro-btn--red"
+          :disabled="deleting"
+          @click="handleDelete"
+        >
+          {{ deleting ? 'Deleting...' : 'Delete' }}
         </button>
       </div>
     </div>

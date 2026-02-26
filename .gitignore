@@ -4,6 +4,7 @@ node_modules/
 # Build output
 frontend/dist/
 backend/dist/
+backend/public/
 
 # Environment variables
 .env
@@ -27,3 +28,7 @@ backend/uploads/
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Server logs
+backend.log
+frontend.log

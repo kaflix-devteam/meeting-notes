@@ -18,7 +18,9 @@ export async function createReport(
 
 export async function getReportById(id: number): Promise<ReportWithTeam | null> {
   const result = await pool.query(
-    `SELECT r.*, t.code AS team_code, t.name AS team_name, u.display_name AS user_display_name
+    `SELECT r.id, r.user_id, r.team_id, TO_CHAR(r.report_date, 'YYYY-MM-DD') AS report_date,
+            r.content_html, r.created_at, r.updated_at,
+            t.code AS team_code, t.name AS team_name, u.display_name AS user_display_name
      FROM reports r
      JOIN teams t ON r.team_id = t.id
      JOIN users u ON r.user_id = u.id
@@ -30,7 +32,9 @@ export async function getReportById(id: number): Promise<ReportWithTeam | null> 
 
 export async function getReportsByUserId(userId: number): Promise<ReportWithTeam[]> {
   const result = await pool.query(
-    `SELECT r.*, t.code AS team_code, t.name AS team_name, u.display_name AS user_display_name
+    `SELECT r.id, r.user_id, r.team_id, TO_CHAR(r.report_date, 'YYYY-MM-DD') AS report_date,
+            r.content_html, r.created_at, r.updated_at,
+            t.code AS team_code, t.name AS team_name, u.display_name AS user_display_name
      FROM reports r
      JOIN teams t ON r.team_id = t.id
      JOIN users u ON r.user_id = u.id
@@ -53,6 +57,14 @@ export async function updateReport(
      WHERE id = $4
      RETURNING *`,
     [contentHtml, teamId, reportDate, id]
+  );
+  return result.rows[0] || null;
+}
+
+export async function deleteReport(id: number): Promise<{ report_date: string } | null> {
+  const result = await pool.query(
+    `DELETE FROM reports WHERE id = $1 RETURNING report_date`,
+    [id]
   );
   return result.rows[0] || null;
 }

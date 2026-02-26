@@ -67,6 +67,32 @@ export async function getReportById(req: Request, res: Response): Promise<void> 
   }
 }
 
+export async function deleteReport(req: Request, res: Response): Promise<void> {
+  try {
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: 'Invalid report ID' });
+      return;
+    }
+
+    const deleted = await reportService.deleteReport(id);
+    if (!deleted) {
+      res.status(404).json({ error: 'Report not found' });
+      return;
+    }
+
+    // Re-merge remaining reports for the date
+    mergeReports(deleted.report_date).catch((err) => {
+      console.error('[reportController] merge after delete failed:', err);
+    });
+
+    res.json({ message: 'Report deleted' });
+  } catch (error) {
+    console.error('[reportController] deleteReport error:', error);
+    res.status(500).json({ error: 'Failed to delete report' });
+  }
+}
+
 export async function updateReport(req: Request, res: Response): Promise<void> {
   try {
     const id = parseInt(req.params.id as string, 10);
@@ -81,16 +107,27 @@ export async function updateReport(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    // Get the old report date before updating (for re-merge if date changed)
+    const oldReport = await reportService.getReportById(id);
+    const oldDate = oldReport?.report_date as unknown as string;
+
     const updated = await reportService.updateReport(id, content_html, team_id, report_date);
     if (!updated) {
       res.status(404).json({ error: 'Report not found' });
       return;
     }
 
-    // Trigger re-merge for the report date
+    // Re-merge for the new report date
     mergeReports(report_date).catch((err) => {
       console.error('[reportController] merge after update failed:', err);
     });
+
+    // If date changed, also re-merge the old date
+    if (oldDate && oldDate !== report_date) {
+      mergeReports(oldDate).catch((err) => {
+        console.error('[reportController] merge old date after update failed:', err);
+      });
+    }
 
     res.json(updated);
   } catch (error) {
