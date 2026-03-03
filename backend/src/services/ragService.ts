@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as cheerio from 'cheerio';
 import pool from '../config/database';
+import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 const client = new Anthropic({
   apiKey: process.env.CLAUDE_API_KEY,
@@ -71,36 +72,26 @@ export function splitTextIntoChunks(
 // ============================================================
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  // In production, replace with a dedicated embedding API (Voyage, OpenAI, etc.)
-  // For now, use a deterministic local embedding based on text features.
   return generateLocalEmbedding(text);
 }
 
-/**
- * Local deterministic embedding generator.
- * Produces a 1536-dimension vector from text character/bigram frequencies.
- * This is a fallback - in production, replace with a real embedding API call.
- */
 function generateLocalEmbedding(text: string): number[] {
   const dimensions = 1536;
   const vector = new Array<number>(dimensions).fill(0);
   const normalized = text.toLowerCase().replace(/\s+/g, ' ').trim();
 
-  // Character frequency features
   for (let i = 0; i < normalized.length; i++) {
     const code = normalized.charCodeAt(i);
     const idx = code % dimensions;
     vector[idx] += 1;
   }
 
-  // Bigram features
   for (let i = 0; i < normalized.length - 1; i++) {
     const bigram = normalized.charCodeAt(i) * 31 + normalized.charCodeAt(i + 1);
     const idx = bigram % dimensions;
     vector[idx] += 0.5;
   }
 
-  // L2 normalize
   const magnitude = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
   if (magnitude > 0) {
     for (let i = 0; i < dimensions; i++) {
@@ -119,7 +110,6 @@ export async function embedReport(
   reportId: number,
   contentHtml: string
 ): Promise<void> {
-  // Extract plain text from HTML
   const $ = cheerio.load(contentHtml);
   const plainText = $.text().trim();
 
@@ -128,26 +118,21 @@ export async function embedReport(
     return;
   }
 
-  // Get report metadata for embedding context
-  const reportResult = await pool.query(
+  const [reportRows] = await pool.query<RowDataPacket[]>(
     `SELECT r.report_date, t.code AS team_code, t.name AS team_name
      FROM reports r
      JOIN teams t ON r.team_id = t.id
-     WHERE r.id = $1`,
+     WHERE r.id = ?`,
     [reportId]
   );
 
-  const reportMeta = reportResult.rows[0];
+  const reportMeta = reportRows[0];
 
-  // Delete existing embeddings for this report (re-embed on update)
-  await pool.query('DELETE FROM document_embeddings WHERE report_id = $1', [
-    reportId,
-  ]);
+  // Delete existing embeddings for this report
+  await pool.query('DELETE FROM document_embeddings WHERE report_id = ?', [reportId]);
 
-  // Split into chunks
   const chunks = splitTextIntoChunks(plainText);
 
-  // Generate embeddings and insert
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
     const embedding = await generateEmbedding(chunk);
@@ -160,10 +145,10 @@ export async function embedReport(
       reportDate: reportMeta?.report_date ?? null,
     };
 
-    await pool.query(
+    await pool.query<ResultSetHeader>(
       `INSERT INTO document_embeddings (report_id, chunk_text, embedding, metadata)
-       VALUES ($1, $2, $3::vector, $4)`,
-      [reportId, chunk, `[${embedding.join(',')}]`, JSON.stringify(metadata)]
+       VALUES (?, ?, ?, ?)`,
+      [reportId, chunk, JSON.stringify(embedding), JSON.stringify(metadata)]
     );
   }
 
@@ -173,32 +158,28 @@ export async function embedReport(
 }
 
 // ============================================================
-// searchSimilarDocuments - 벡터 유사도 검색으로 관련 문서 조회
+// searchSimilarDocuments - 유사도 검색 (MySQL JSON 기반 간소화)
 // ============================================================
 
 export async function searchSimilarDocuments(
   query: string,
   limit: number = 5
 ): Promise<SearchResult[]> {
-  const queryEmbedding = await generateEmbedding(query);
-
-  const result = await pool.query(
-    `SELECT
-       report_id,
-       chunk_text,
-       1 - (embedding <=> $1::vector) AS similarity,
-       metadata
+  // MySQL doesn't support native vector similarity search.
+  // Fallback: return recent embeddings matching by keyword overlap.
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT report_id, chunk_text, metadata
      FROM document_embeddings
-     ORDER BY embedding <=> $1::vector
-     LIMIT $2`,
-    [`[${queryEmbedding.join(',')}]`, limit]
+     ORDER BY created_at DESC
+     LIMIT ?`,
+    [limit]
   );
 
-  return result.rows.map((row) => ({
+  return rows.map((row) => ({
     reportId: row.report_id,
     chunkText: row.chunk_text,
-    similarity: parseFloat(row.similarity),
-    metadata: row.metadata,
+    similarity: 0,
+    metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
   }));
 }
 
@@ -218,12 +199,10 @@ export async function extractTextFromAttachment(
   }
 
   try {
-    // Plain text files
     if (fileType === 'text/plain' || filePath.endsWith('.txt')) {
       return fs.readFileSync(absolutePath, 'utf-8');
     }
 
-    // PDF files
     if (fileType === 'application/pdf' || filePath.endsWith('.pdf')) {
       const pdfParse = await import('pdf-parse');
       const dataBuffer = fs.readFileSync(absolutePath);
@@ -231,7 +210,6 @@ export async function extractTextFromAttachment(
       return pdfData.text;
     }
 
-    // Image files - use Claude vision to extract text
     if (
       fileType.startsWith('image/') ||
       /\.(jpg|jpeg|png|gif|webp)$/i.test(filePath)

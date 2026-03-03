@@ -8,7 +8,8 @@ export async function uploadImage(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const url = `/uploads/${file.filename}`;
+    const basePath = process.env.BASE_PATH || '';
+    const url = `${basePath}/uploads/${file.filename}`;
 
     res.status(201).json({
       url,

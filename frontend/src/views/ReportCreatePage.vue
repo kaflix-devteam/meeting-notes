@@ -6,7 +6,7 @@ import RichEditor from '../components/RichEditor.vue'
 import CalendarPicker from '../components/CalendarPicker.vue'
 import FileUploader from '../components/FileUploader.vue'
 import ReportPreview from '../components/ReportPreview.vue'
-import { createReport, uploadAttachment } from '../api'
+import { createReport, uploadAttachment, polishReport } from '../api'
 
 const router = useRouter()
 
@@ -15,8 +15,28 @@ const content = ref('')
 const reportDate = ref(new Date().toISOString().slice(0, 10))
 const showPreview = ref(false)
 const saving = ref(false)
+const polishing = ref(false)
 const errorMsg = ref('')
 const fileUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null)
+
+async function handlePolish() {
+  if (!content.value || content.value === '<p></p>') {
+    errorMsg.value = '다듬을 내용을 먼저 작성해주세요.'
+    return
+  }
+
+  polishing.value = true
+  errorMsg.value = ''
+
+  try {
+    const res = await polishReport(content.value)
+    content.value = res.data.content_html
+  } catch (e: any) {
+    errorMsg.value = e.response?.data?.error || 'AI 다듬기에 실패했습니다.'
+  } finally {
+    polishing.value = false
+  }
+}
 
 async function handleSave() {
   if (!teamId.value) {
@@ -68,7 +88,7 @@ async function handleSave() {
 
       <div class="report-create__editor">
         <label class="metro-label">Content</label>
-        <RichEditor v-model="content" />
+        <RichEditor v-model="content" :editable="!polishing" />
       </div>
 
       <FileUploader ref="fileUploaderRef" />
@@ -86,10 +106,18 @@ async function handleSave() {
         <button
           type="button"
           class="metro-btn metro-btn--green"
-          :disabled="saving"
+          :disabled="saving || polishing"
           @click="handleSave"
         >
           {{ saving ? 'Saving...' : 'Save' }}
+        </button>
+        <button
+          type="button"
+          class="metro-btn metro-btn--blue"
+          :disabled="polishing || saving"
+          @click="handlePolish"
+        >
+          {{ polishing ? 'AI 다듬는 중...' : 'AI 다듬기' }}
         </button>
       </div>
     </div>

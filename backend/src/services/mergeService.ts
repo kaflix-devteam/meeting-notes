@@ -1,4 +1,5 @@
 import pool from '../config/database';
+import { ResultSetHeader } from 'mysql2';
 import { ReportWithTeam } from '../models/types';
 import { getReportsByDate } from './reportService';
 import {
@@ -85,14 +86,13 @@ async function mergeReportsDirect(reportDate: string): Promise<void> {
   // 4. Generate final merged HTML via Claude API
   const mergedHtml = await generateFinalReportHtml(teamAnalyses, reportDate);
 
-  // 5. UPSERT into final_reports
-  await pool.query(
+  // 5. UPSERT into final_reports (MySQL ON DUPLICATE KEY UPDATE)
+  await pool.query<ResultSetHeader>(
     `INSERT INTO final_reports (report_date, content_html, team_summary)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (report_date)
-     DO UPDATE SET content_html = EXCLUDED.content_html,
-                   team_summary = EXCLUDED.team_summary,
-                   updated_at = NOW()`,
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       content_html = VALUES(content_html),
+       team_summary = VALUES(team_summary)`,
     [reportDate, mergedHtml, JSON.stringify(teamSummary)]
   );
 

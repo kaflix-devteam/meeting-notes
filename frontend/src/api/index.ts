@@ -8,7 +8,7 @@ import type {
 } from '../types'
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: '/meeting/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -36,6 +36,10 @@ export function updateReport(id: number, data: UpdateReportPayload) {
 
 export function deleteReport(id: number) {
   return api.delete(`/reports/${id}`)
+}
+
+export function polishReport(contentHtml: string) {
+  return api.post<{ content_html: string }>('/reports/polish', { content_html: contentHtml })
 }
 
 export function uploadAttachment(reportId: number, file: File) {

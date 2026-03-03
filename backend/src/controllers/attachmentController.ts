@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
+import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 export async function uploadAttachment(req: Request, res: Response): Promise<void> {
   try {
@@ -10,8 +11,8 @@ export async function uploadAttachment(req: Request, res: Response): Promise<voi
     }
 
     // Verify report exists
-    const reportCheck = await pool.query('SELECT id FROM reports WHERE id = $1', [reportId]);
-    if (reportCheck.rows.length === 0) {
+    const [reportRows] = await pool.query<RowDataPacket[]>('SELECT id FROM reports WHERE id = ?', [reportId]);
+    if (reportRows.length === 0) {
       res.status(404).json({ error: 'Report not found' });
       return;
     }
@@ -22,21 +23,14 @@ export async function uploadAttachment(req: Request, res: Response): Promise<voi
       return;
     }
 
-    const result = await pool.query(
+    const [result] = await pool.query<ResultSetHeader>(
       `INSERT INTO attachments (report_id, original_name, stored_name, file_type, file_size, file_path)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [
-        reportId,
-        file.originalname,
-        file.filename,
-        file.mimetype,
-        file.size,
-        file.path,
-      ]
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [reportId, file.originalname, file.filename, file.mimetype, file.size, file.path]
     );
 
-    res.status(201).json(result.rows[0]);
+    const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM attachments WHERE id = ?', [result.insertId]);
+    res.status(201).json(rows[0]);
   } catch (error) {
     console.error('[attachmentController] uploadAttachment error:', error);
     res.status(500).json({ error: 'Failed to upload attachment' });

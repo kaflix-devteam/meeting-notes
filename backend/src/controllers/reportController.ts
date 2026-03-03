@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import * as reportService from '../services/reportService';
 import { mergeReports } from '../services/mergeService';
+import { polishReport as polishReportAI } from '../services/aiService';
 
 export async function createReport(req: Request, res: Response): Promise<void> {
   try {
@@ -133,5 +134,22 @@ export async function updateReport(req: Request, res: Response): Promise<void> {
   } catch (error) {
     console.error('[reportController] updateReport error:', error);
     res.status(500).json({ error: 'Failed to update report' });
+  }
+}
+
+export async function polishReport(req: Request, res: Response): Promise<void> {
+  try {
+    const { content_html } = req.body;
+
+    if (!content_html || content_html === '<p></p>') {
+      res.status(400).json({ error: '다듬을 내용이 없습니다.' });
+      return;
+    }
+
+    const polished = await polishReportAI(content_html);
+    res.json({ content_html: polished });
+  } catch (error) {
+    console.error('[reportController] polishReport error:', error);
+    res.status(500).json({ error: 'AI 다듬기에 실패했습니다.' });
   }
 }

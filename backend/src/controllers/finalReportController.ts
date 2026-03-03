@@ -1,18 +1,25 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
+import { RowDataPacket } from 'mysql2';
 
 export async function getFinalReports(_req: Request, res: Response): Promise<void> {
   try {
-    const result = await pool.query(
-      `SELECT id, TO_CHAR(report_date, 'YYYY-MM-DD') AS report_date, team_summary, created_at, updated_at
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, DATE_FORMAT(report_date, '%Y-%m-%d') AS report_date, team_summary, created_at, updated_at
        FROM final_reports
        ORDER BY report_date DESC`
     );
-    const rows = result.rows.map((row: any) => ({
-      ...row,
-      teams: row.team_summary ? Object.values(row.team_summary).map((t: any) => t.teamName) : [],
-    }));
-    res.json(rows);
+    const result = rows.map((row: any) => {
+      const summary = typeof row.team_summary === 'string'
+        ? JSON.parse(row.team_summary)
+        : row.team_summary;
+      return {
+        ...row,
+        team_summary: summary,
+        teams: summary ? Object.values(summary).map((t: any) => t.teamName) : [],
+      };
+    });
+    res.json(result);
   } catch (error) {
     console.error('[finalReportController] getFinalReports error:', error);
     res.status(500).json({ error: 'Failed to fetch final reports' });
@@ -27,21 +34,25 @@ export async function getFinalReportById(req: Request, res: Response): Promise<v
       return;
     }
 
-    const result = await pool.query(
-      `SELECT id, TO_CHAR(report_date, 'YYYY-MM-DD') AS report_date, content_html, team_summary, created_at, updated_at
-       FROM final_reports WHERE id = $1`,
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, DATE_FORMAT(report_date, '%Y-%m-%d') AS report_date, content_html, team_summary, created_at, updated_at
+       FROM final_reports WHERE id = ?`,
       [id]
     );
 
-    if (result.rows.length === 0) {
+    if (rows.length === 0) {
       res.status(404).json({ error: 'Final report not found' });
       return;
     }
 
-    const row = result.rows[0];
+    const row = rows[0];
+    const summary = typeof row.team_summary === 'string'
+      ? JSON.parse(row.team_summary)
+      : row.team_summary;
     res.json({
       ...row,
-      teams: row.team_summary ? Object.values(row.team_summary).map((t: any) => t.teamName) : [],
+      team_summary: summary,
+      teams: summary ? Object.values(summary).map((t: any) => t.teamName) : [],
     });
   } catch (error) {
     console.error('[finalReportController] getFinalReportById error:', error);

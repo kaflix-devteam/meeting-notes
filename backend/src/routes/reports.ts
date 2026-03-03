@@ -5,12 +5,14 @@ import {
   getReportById,
   updateReport,
   deleteReport,
+  polishReport,
 } from '../controllers/reportController';
 import { uploadAttachment } from '../controllers/attachmentController';
 import upload from '../middleware/upload';
 
 const router = Router();
 
+router.post('/polish', polishReport);
 router.post('/', createReport);
 router.get('/', getReports);
 router.get('/:id', getReportById);

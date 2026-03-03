@@ -5,9 +5,12 @@ import Image from '@tiptap/extension-image'
 import { ClipboardImagePaste } from '../extensions/clipboardImagePaste'
 import { watch } from 'vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: string
-}>()
+  editable?: boolean
+}>(), {
+  editable: true,
+})
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
@@ -39,10 +42,19 @@ watch(
     }
   }
 )
+
+watch(
+  () => props.editable,
+  (val) => {
+    if (editor.value) {
+      editor.value.setEditable(val)
+    }
+  }
+)
 </script>
 
 <template>
-  <div class="rich-editor">
+  <div class="rich-editor" :class="{ 'rich-editor--readonly': !editable }">
     <div v-if="editor" class="rich-editor__toolbar">
       <button
         type="button"
@@ -201,6 +213,11 @@ watch(
   border: none;
   border-top: 1px solid var(--metro-border);
   margin: 16px 0;
+}
+
+.rich-editor--readonly {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .rich-editor__content :deep(.rich-editor-image) {

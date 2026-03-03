@@ -1,5 +1,6 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import pool from '../config/database';
+import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import {
   analyzeReport,
   generateFinalReportHtml,
@@ -72,23 +73,20 @@ type MergeState = typeof MergeWorkflowState.State;
 // Workflow Nodes
 // ============================================================
 
-/**
- * Node 1: collectReports - 해당 날짜의 모든 팀 보고서 수집
- */
 async function collectReports(state: MergeState): Promise<Partial<MergeState>> {
   console.log(`[workflow] Collecting reports for date: ${state.reportDate}`);
 
-  const result = await pool.query(
+  const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT r.id, r.user_id, r.team_id, r.report_date, r.content_html,
             t.code AS team_code, t.name AS team_name
      FROM reports r
      JOIN teams t ON r.team_id = t.id
-     WHERE r.report_date = $1
+     WHERE r.report_date = ?
      ORDER BY t.code, r.id`,
     [state.reportDate]
   );
 
-  const reports: Report[] = result.rows.map((row) => ({
+  const reports: Report[] = rows.map((row) => ({
     id: row.id,
     userId: row.user_id,
     teamId: row.team_id,
@@ -102,9 +100,6 @@ async function collectReports(state: MergeState): Promise<Partial<MergeState>> {
   return { reports };
 }
 
-/**
- * Node 2: groupByTeam - 팀별로 그룹핑
- */
 async function groupByTeam(state: MergeState): Promise<Partial<MergeState>> {
   console.log('[workflow] Grouping reports by team');
 
@@ -121,9 +116,6 @@ async function groupByTeam(state: MergeState): Promise<Partial<MergeState>> {
   return { teamReports };
 }
 
-/**
- * Node 3: analyzeReports - Claude API로 각 팀 보고서 분석
- */
 async function analyzeReports(state: MergeState): Promise<Partial<MergeState>> {
   console.log('[workflow] Analyzing reports by team');
 
@@ -152,9 +144,6 @@ async function analyzeReports(state: MergeState): Promise<Partial<MergeState>> {
   return { analysisResults };
 }
 
-/**
- * Node 4: generateFinalReport - 최종보고서 HTML 생성
- */
 async function generateFinalReport(
   state: MergeState
 ): Promise<Partial<MergeState>> {
@@ -172,7 +161,6 @@ async function generateFinalReport(
     state.reportDate
   );
 
-  // Build team summary JSON
   const teamSummary: Record<string, unknown> = {};
   for (const analysis of state.analysisResults) {
     teamSummary[analysis.teamCode] = {
@@ -188,9 +176,6 @@ async function generateFinalReport(
   return { mergedHtml, teamSummary };
 }
 
-/**
- * Node 5: saveFinalReport - final_reports 테이블에 UPSERT
- */
 async function saveFinalReport(
   state: MergeState
 ): Promise<Partial<MergeState>> {
@@ -200,26 +185,28 @@ async function saveFinalReport(
     return { error: 'No merged HTML to save' };
   }
 
-  const result = await pool.query(
+  await pool.query<ResultSetHeader>(
     `INSERT INTO final_reports (report_date, content_html, team_summary)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (report_date)
-     DO UPDATE SET
-       content_html = EXCLUDED.content_html,
-       team_summary = EXCLUDED.team_summary,
-       updated_at = NOW()
-     RETURNING id`,
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       content_html = VALUES(content_html),
+       team_summary = VALUES(team_summary)`,
     [state.reportDate, state.mergedHtml, JSON.stringify(state.teamSummary ?? {})]
   );
 
-  const finalReportId = result.rows[0].id;
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id FROM final_reports WHERE report_date = ?',
+    [state.reportDate]
+  );
+
+  const finalReportId = rows[0]?.id;
   console.log(`[workflow] Final report saved with id: ${finalReportId}`);
 
   return { finalReportId };
 }
 
 // ============================================================
-// Conditional edge: skip if no reports found
+// Conditional edge
 // ============================================================
 
 function shouldContinue(state: MergeState): string {
@@ -230,7 +217,7 @@ function shouldContinue(state: MergeState): string {
 }
 
 // ============================================================
-// createMergeWorkflow - 워크플로우 그래프 생성
+// createMergeWorkflow
 // ============================================================
 
 export function createMergeWorkflow() {
@@ -254,7 +241,7 @@ export function createMergeWorkflow() {
 }
 
 // ============================================================
-// executeMergeWorkflow - 워크플로우 실행
+// executeMergeWorkflow
 // ============================================================
 
 export async function executeMergeWorkflow(
@@ -294,7 +281,6 @@ export async function executeMergeWorkflow(
       };
     }
 
-    // Trigger async embedding for each report (fire and forget)
     for (const report of finalState.reports) {
       embedReport(report.id, report.contentHtml).catch((err) => {
         console.error(

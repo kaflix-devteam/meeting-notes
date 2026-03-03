@@ -1,8 +1,15 @@
 import Anthropic from '@anthropic-ai/sdk';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const client = new Anthropic({
   apiKey: process.env.CLAUDE_API_KEY,
 });
+
+const polishGuide = fs.readFileSync(
+  path.join(__dirname, '../prompts/polish-guide.md'),
+  'utf-8'
+);
 
 // ============================================================
 // Types
@@ -183,6 +190,52 @@ ${content}`,
   } catch (error) {
     console.error('[aiService] summarizeReport failed:', error);
     return '요약을 생성할 수 없습니다.';
+  }
+}
+
+// ============================================================
+// polishReport - 보고서 내용 다듬기
+// ============================================================
+
+export async function polishReport(contentHtml: string): Promise<string> {
+  try {
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      messages: [
+        {
+          role: 'user',
+          content: `다음은 업무보고서의 HTML 내용입니다. 아래 가이드를 참고하여 문장을 자연스럽고 매끄럽게 다듬어주세요.
+
+${polishGuide}
+
+다듬어진 HTML만 응답하세요 (다른 텍스트 없이).
+
+보고서 HTML:
+${contentHtml}`,
+        },
+      ],
+    });
+
+    const responseText =
+      message.content[0].type === 'text' ? message.content[0].text : '';
+
+    // Try to extract HTML content from the response
+    const trimmed = responseText.trim();
+    if (trimmed.startsWith('<')) {
+      return trimmed;
+    }
+
+    // If wrapped in code block, extract it
+    const codeBlockMatch = trimmed.match(/```(?:html)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      return codeBlockMatch[1].trim();
+    }
+
+    return trimmed || contentHtml;
+  } catch (error) {
+    console.error('[aiService] polishReport failed:', error);
+    throw error;
   }
 }
 
