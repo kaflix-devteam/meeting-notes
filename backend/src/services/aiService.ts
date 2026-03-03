@@ -11,6 +11,18 @@ const polishGuide = fs.readFileSync(
   'utf-8'
 );
 
+const teamPrompt = fs.readFileSync(
+  path.join(__dirname, '../prompts/team.md'),
+  'utf-8'
+);
+
+const polishSystemPrompt = `${teamPrompt}\n\n${polishGuide}`;
+
+const mergePrompt = fs.readFileSync(
+  path.join(__dirname, '../prompts/merge.md'),
+  'utf-8'
+);
+
 // ============================================================
 // Types
 // ============================================================
@@ -194,6 +206,44 @@ ${content}`,
 }
 
 // ============================================================
+// generateMergeSummary - 병합 보고서 요약문 생성 (토큰 최소화)
+// ============================================================
+
+export async function generateMergeSummary(
+  teams: { name: string; count: number }[],
+  reportDate: string
+): Promise<string> {
+  try {
+    const teamList = teams.map((t) => `- ${t.name}: ${t.count}건`).join('\n');
+
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 256,
+      system: [
+        {
+          type: 'text',
+          text: mergePrompt,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [
+        {
+          role: 'user',
+          content: `${reportDate} 업무보고서 병합 요약문을 1~2문장으로 작성해주세요.\n\n참여 팀:\n${teamList}`,
+        },
+      ],
+    });
+
+    const responseText =
+      message.content[0].type === 'text' ? message.content[0].text : '';
+    return responseText.trim();
+  } catch (error) {
+    console.error('[aiService] generateMergeSummary failed:', error);
+    return `${reportDate} 업무보고서 - ${teams.map((t) => t.name).join(', ')} 팀의 보고서가 병합되었습니다.`;
+  }
+}
+
+// ============================================================
 // polishReport - 보고서 내용 다듬기
 // ============================================================
 
@@ -202,17 +252,17 @@ export async function polishReport(contentHtml: string): Promise<string> {
     const message = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
+      system: [
+        {
+          type: 'text',
+          text: polishSystemPrompt,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
       messages: [
         {
           role: 'user',
-          content: `다음은 업무보고서의 HTML 내용입니다. 아래 가이드를 참고하여 문장을 자연스럽고 매끄럽게 다듬어주세요.
-
-${polishGuide}
-
-다듬어진 HTML만 응답하세요 (다른 텍스트 없이).
-
-보고서 HTML:
-${contentHtml}`,
+          content: `다음 업무보고서 HTML을 다듬어주세요.\n\n${contentHtml}`,
         },
       ],
     });

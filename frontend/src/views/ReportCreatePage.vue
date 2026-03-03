@@ -6,7 +6,8 @@ import RichEditor from '../components/RichEditor.vue'
 import CalendarPicker from '../components/CalendarPicker.vue'
 import FileUploader from '../components/FileUploader.vue'
 import ReportPreview from '../components/ReportPreview.vue'
-import { createReport, uploadAttachment, polishReport } from '../api'
+import PolishOverlay from '../components/PolishOverlay.vue'
+import { createReport, uploadAttachment, polishReport, mergeFinalReport } from '../api'
 
 const router = useRouter()
 
@@ -16,8 +17,28 @@ const reportDate = ref(new Date().toISOString().slice(0, 10))
 const showPreview = ref(false)
 const saving = ref(false)
 const polishing = ref(false)
+const merging = ref(false)
 const errorMsg = ref('')
 const fileUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null)
+
+async function handleMerge() {
+  if (!reportDate.value) {
+    errorMsg.value = '보고서 날짜가 필요합니다.'
+    return
+  }
+
+  merging.value = true
+  errorMsg.value = ''
+
+  try {
+    await mergeFinalReport(reportDate.value)
+    alert('최종보고서에 병합되었습니다.')
+  } catch (e: any) {
+    errorMsg.value = e.response?.data?.error || '최종보고서 병합에 실패했습니다.'
+  } finally {
+    merging.value = false
+  }
+}
 
 async function handlePolish() {
   if (!content.value || content.value === '<p></p>') {
@@ -119,6 +140,14 @@ async function handleSave() {
         >
           {{ polishing ? 'AI 다듬는 중...' : 'AI 다듬기' }}
         </button>
+        <button
+          type="button"
+          class="metro-btn metro-btn--purple"
+          :disabled="merging || saving || polishing"
+          @click="handleMerge"
+        >
+          {{ merging ? '병합 중...' : '최종보고서에 병합' }}
+        </button>
       </div>
     </div>
 
@@ -127,6 +156,8 @@ async function handleSave() {
       :visible="showPreview"
       @close="showPreview = false"
     />
+
+    <PolishOverlay :visible="polishing || merging" />
   </div>
 </template>
 

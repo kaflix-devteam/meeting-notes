@@ -2,42 +2,15 @@ import pool from '../config/database';
 import { ResultSetHeader } from 'mysql2';
 import { ReportWithTeam } from '../models/types';
 import { getReportsByDate } from './reportService';
-import {
-  analyzeReport,
-  generateFinalReportHtml,
-  TeamAnalysis,
-} from './aiService';
+import { generateMergeSummary } from './aiService';
 import { embedReport } from './ragService';
-import { executeMergeWorkflow } from './workflow';
 
 /**
- * Merge reports using the LangGraph workflow.
- * Falls back to the direct merge implementation if LangGraph fails.
+ * 수동 병합: 사용자가 명시적으로 트리거하는 최종보고서 병합.
+ * 원본 보고서 내용을 수정하지 않고 구조적 병합만 수행한다.
  */
-export async function mergeReports(reportDate: string): Promise<void> {
-  try {
-    const result = await executeMergeWorkflow(reportDate);
-
-    if (!result.success) {
-      console.warn(
-        `[mergeService] LangGraph workflow failed: ${result.error}. Falling back to direct merge.`
-      );
-      await mergeReportsDirect(reportDate);
-    }
-  } catch (error) {
-    console.error(
-      '[mergeService] LangGraph workflow threw exception, falling back to direct merge:',
-      error
-    );
-    await mergeReportsDirect(reportDate);
-  }
-}
-
-/**
- * Direct merge implementation (fallback when LangGraph is unavailable).
- */
-async function mergeReportsDirect(reportDate: string): Promise<void> {
-  // 1. Fetch all reports for the given date with team info
+export async function mergeReportsManual(reportDate: string): Promise<void> {
+  // 1. 해당 날짜 보고서 수집
   const reports = await getReportsByDate(reportDate);
 
   if (reports.length === 0) {
@@ -45,7 +18,7 @@ async function mergeReportsDirect(reportDate: string): Promise<void> {
     return;
   }
 
-  // 2. Group by team
+  // 2. 팀별 그룹핑
   const teamGroups = new Map<number, ReportWithTeam[]>();
   for (const report of reports) {
     const existing = teamGroups.get(report.team_id) || [];
@@ -53,40 +26,56 @@ async function mergeReportsDirect(reportDate: string): Promise<void> {
     teamGroups.set(report.team_id, existing);
   }
 
-  // 3. Analyze each team's reports with Claude API
-  const teamAnalyses: TeamAnalysis[] = [];
+  // 3. 팀 메타데이터로 AI 요약문 생성 (토큰 최소화: 팀 이름+건수만 전달)
+  const teamsMeta: { code: string; name: string; count: number; reports: ReportWithTeam[] }[] = [];
   for (const [, teamReports] of teamGroups) {
-    const firstReport = teamReports[0];
-    const combinedContent = teamReports
-      .map((r) => r.content_html)
-      .join('\n<hr/>\n');
-
-    const analysis = await analyzeReport(combinedContent, firstReport.team_name);
-
-    teamAnalyses.push({
-      teamCode: firstReport.team_code,
-      teamName: firstReport.team_name,
-      reportContents: teamReports.map((r) => r.content_html),
-      analysis,
+    const first = teamReports[0];
+    teamsMeta.push({
+      code: first.team_code,
+      name: first.team_name,
+      count: teamReports.length,
+      reports: teamReports,
     });
   }
 
-  // Build team_summary JSON
+  const summary = await generateMergeSummary(
+    teamsMeta.map((t) => ({ name: t.name, count: t.count })),
+    reportDate
+  );
+
+  // 4. HTML 프로그래밍적 조립 (원본 내용 그대로 삽입)
+  const teamSections = teamsMeta
+    .map((team) => {
+      const reportsHtml = team.reports
+        .map((r) => r.content_html)
+        .join('\n<hr/>\n');
+
+      return `<section class="team-section" data-team="${team.code}">
+    <h2>${team.name}</h2>
+    <div class="report-content">${reportsHtml}</div>
+  </section>`;
+    })
+    .join('\n\n  ');
+
+  const mergedHtml = `<div class="final-report">
+  <h1>업무보고서 - ${reportDate}</h1>
+  <div class="overall-summary">
+    <p>${summary}</p>
+  </div>
+
+  ${teamSections}
+</div>`;
+
+  // 5. team_summary JSON 구성
   const teamSummary: Record<string, unknown> = {};
-  for (const ta of teamAnalyses) {
-    teamSummary[ta.teamCode] = {
-      teamName: ta.teamName,
-      summary: ta.analysis.summary,
-      keyPoints: ta.analysis.keyPoints,
-      opinions: ta.analysis.opinions,
-      suggestions: ta.analysis.suggestions,
+  for (const team of teamsMeta) {
+    teamSummary[team.code] = {
+      teamName: team.name,
+      reportCount: team.count,
     };
   }
 
-  // 4. Generate final merged HTML via Claude API
-  const mergedHtml = await generateFinalReportHtml(teamAnalyses, reportDate);
-
-  // 5. UPSERT into final_reports (MySQL ON DUPLICATE KEY UPDATE)
+  // 6. UPSERT final_reports
   await pool.query<ResultSetHeader>(
     `INSERT INTO final_reports (report_date, content_html, team_summary)
      VALUES (?, ?, ?)
@@ -97,10 +86,10 @@ async function mergeReportsDirect(reportDate: string): Promise<void> {
   );
 
   console.log(
-    `[mergeService] Final report for ${reportDate} created/updated with ${teamAnalyses.length} team(s)`
+    `[mergeService] Final report for ${reportDate} merged with ${teamsMeta.length} team(s), ${reports.length} report(s)`
   );
 
-  // 6. Trigger async embedding for each report
+  // 7. 비동기 임베딩
   for (const report of reports) {
     embedReport(report.id, report.content_html).catch((err) => {
       console.error(

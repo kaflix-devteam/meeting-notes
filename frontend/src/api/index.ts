@@ -62,6 +62,10 @@ export function uploadImage(file: File | Blob) {
   })
 }
 
+export function mergeFinalReport(reportDate: string) {
+  return api.post<{ message: string }>('/final-reports/merge', { report_date: reportDate })
+}
+
 export function getFinalReports() {
   return api.get<FinalReport[]>('/final-reports')
 }

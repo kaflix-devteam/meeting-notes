@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
 import { RowDataPacket } from 'mysql2';
+import { mergeReportsManual } from '../services/mergeService';
 
 export async function getFinalReports(_req: Request, res: Response): Promise<void> {
   try {
@@ -57,5 +58,22 @@ export async function getFinalReportById(req: Request, res: Response): Promise<v
   } catch (error) {
     console.error('[finalReportController] getFinalReportById error:', error);
     res.status(500).json({ error: 'Failed to fetch final report' });
+  }
+}
+
+export async function mergeFinalReport(req: Request, res: Response): Promise<void> {
+  try {
+    const { report_date } = req.body;
+
+    if (!report_date) {
+      res.status(400).json({ error: 'report_date is required' });
+      return;
+    }
+
+    await mergeReportsManual(report_date);
+    res.json({ message: '최종보고서에 병합되었습니다.' });
+  } catch (error) {
+    console.error('[finalReportController] mergeFinalReport error:', error);
+    res.status(500).json({ error: '최종보고서 병합에 실패했습니다.' });
   }
 }
