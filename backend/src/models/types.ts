@@ -1,13 +1,22 @@
-export interface Team {
+export interface Department {
   id: number;
   code: string;
   name: string;
   created_at: Date;
 }
 
+export interface Team {
+  id: number;
+  code: string;
+  name: string;
+  department_id: number;
+  created_at: Date;
+}
+
 export interface User {
   id: number;
   username: string;
+  password: string;
   display_name: string;
   team_id: number;
   created_at: Date;
@@ -17,6 +26,7 @@ export interface Report {
   id: number;
   user_id: number;
   team_id: number;
+  department_id: number;
   report_date: Date;
   content_html: string;
   created_at: Date;
@@ -26,6 +36,7 @@ export interface Report {
 export interface ReportWithTeam extends Report {
   team_code: string;
   team_name: string;
+  department_name?: string;
   user_display_name?: string;
 }
 

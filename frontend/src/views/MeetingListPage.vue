@@ -34,12 +34,11 @@ function goToDetail(id: number) {
       >
         <div class="meeting-list__date">{{ report.report_date }}</div>
         <div class="meeting-list__teams">
-          <span
-            v-for="team in report.teams"
-            :key="team"
-            class="metro-badge metro-badge--blue"
-          >
-            {{ team }}
+          <span v-if="(report as any).department_name" class="metro-badge" :style="{ backgroundColor: (report as any).department_color || '#5c2d91' }">
+            {{ (report as any).department_name }}
+          </span>
+          <span v-if="(report as any).team_name" class="metro-badge" :style="{ backgroundColor: (report as any).team_color || '#107c10' }">
+            {{ (report as any).team_name }}
           </span>
         </div>
       </div>

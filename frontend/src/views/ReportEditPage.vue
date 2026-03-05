@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import TeamSelector from '../components/TeamSelector.vue'
 import RichEditor from '../components/RichEditor.vue'
 import CalendarPicker from '../components/CalendarPicker.vue'
 import FileUploader from '../components/FileUploader.vue'
 import ReportPreview from '../components/ReportPreview.vue'
 import PolishOverlay from '../components/PolishOverlay.vue'
+import { useAuthStore } from '../stores/authStore'
 import { getReport, updateReport, uploadAttachment, deleteReport, polishReport, mergeFinalReport } from '../api'
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 
 const reportId = ref(0)
-const teamId = ref(0)
 const content = ref('')
 const reportDate = ref('')
 const showPreview = ref(false)
@@ -29,7 +29,6 @@ onMounted(async () => {
   reportId.value = Number(route.params.id)
   try {
     const res = await getReport(reportId.value)
-    teamId.value = res.data.team_id
     content.value = res.data.content_html
     reportDate.value = res.data.report_date
   } catch (e: any) {
@@ -84,7 +83,7 @@ async function handleMerge() {
   errorMsg.value = ''
 
   try {
-    await mergeFinalReport(reportDate.value)
+    await mergeFinalReport(reportDate.value, auth.user!.department_id!)
     alert('최종보고서에 병합되었습니다.')
   } catch (e: any) {
     errorMsg.value = e.response?.data?.error || '최종보고서 병합에 실패했습니다.'
@@ -94,12 +93,8 @@ async function handleMerge() {
 }
 
 async function handleSave() {
-  if (!teamId.value) {
-    errorMsg.value = 'Please select a team.'
-    return
-  }
   if (!content.value || content.value === '<p></p>') {
-    errorMsg.value = 'Please write report content.'
+    errorMsg.value = '보고서 내용을 작성해주세요.'
     return
   }
 
@@ -108,7 +103,6 @@ async function handleSave() {
 
   try {
     await updateReport(reportId.value, {
-      team_id: teamId.value,
       content_html: content.value,
       report_date: reportDate.value,
     })
@@ -135,8 +129,13 @@ async function handleSave() {
     <div v-if="loading" class="metro-loading">Loading...</div>
 
     <div v-else class="report-edit__form">
+      <div class="report-edit__info">
+        <span class="report-edit__badge">{{ auth.user?.department_name }}</span>
+        <span class="report-edit__badge">{{ auth.user?.team_name }}</span>
+        <span class="report-edit__user">{{ auth.user?.display_name }}</span>
+      </div>
+
       <div class="report-edit__top">
-        <TeamSelector v-model="teamId" />
         <CalendarPicker v-model="reportDate" />
       </div>
 
@@ -214,6 +213,28 @@ async function handleSave() {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.report-edit__info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-edit__badge {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background-color: var(--metro-blue);
+}
+
+.report-edit__user {
+  font-size: 14px;
+  color: var(--metro-text);
+  font-weight: 600;
+  margin-left: 4px;
 }
 
 .report-edit__top {

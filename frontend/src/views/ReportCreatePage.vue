@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import TeamSelector from '../components/TeamSelector.vue'
 import RichEditor from '../components/RichEditor.vue'
 import CalendarPicker from '../components/CalendarPicker.vue'
 import FileUploader from '../components/FileUploader.vue'
 import ReportPreview from '../components/ReportPreview.vue'
 import PolishOverlay from '../components/PolishOverlay.vue'
+import { useAuthStore } from '../stores/authStore'
 import { createReport, uploadAttachment, polishReport, mergeFinalReport } from '../api'
 
 const router = useRouter()
+const auth = useAuthStore()
 
-const teamId = ref(0)
 const content = ref('')
 const reportDate = ref(new Date().toISOString().slice(0, 10))
 const showPreview = ref(false)
@@ -31,7 +31,7 @@ async function handleMerge() {
   errorMsg.value = ''
 
   try {
-    await mergeFinalReport(reportDate.value)
+    await mergeFinalReport(reportDate.value, auth.user!.department_id!)
     alert('최종보고서에 병합되었습니다.')
   } catch (e: any) {
     errorMsg.value = e.response?.data?.error || '최종보고서 병합에 실패했습니다.'
@@ -60,12 +60,8 @@ async function handlePolish() {
 }
 
 async function handleSave() {
-  if (!teamId.value) {
-    errorMsg.value = 'Please select a team.'
-    return
-  }
   if (!content.value || content.value === '<p></p>') {
-    errorMsg.value = 'Please write report content.'
+    errorMsg.value = '보고서 내용을 작성해주세요.'
     return
   }
 
@@ -74,10 +70,9 @@ async function handleSave() {
 
   try {
     const res = await createReport({
-      team_id: teamId.value,
       content_html: content.value,
       report_date: reportDate.value,
-      user_id: 1,
+      user_id: auth.user!.id,
     })
 
     const reportId = res.data.id
@@ -90,7 +85,7 @@ async function handleSave() {
 
     router.push('/my-reports')
   } catch (e: any) {
-    errorMsg.value = e.response?.data?.message || e.message || 'Failed to save report.'
+    errorMsg.value = e.response?.data?.error || e.message || '보고서 저장에 실패했습니다.'
   } finally {
     saving.value = false
   }
@@ -101,9 +96,14 @@ async function handleSave() {
   <div class="report-create">
     <h2 class="metro-section__title">New Report</h2>
 
+    <div class="report-create__info">
+      <span class="report-create__badge">{{ auth.user?.department_name }}</span>
+      <span class="report-create__badge">{{ auth.user?.team_name }}</span>
+      <span class="report-create__user">{{ auth.user?.display_name }}</span>
+    </div>
+
     <div class="report-create__form">
       <div class="report-create__top">
-        <TeamSelector v-model="teamId" />
         <CalendarPicker v-model="reportDate" />
       </div>
 
@@ -166,6 +166,29 @@ async function handleSave() {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.report-create__info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.report-create__badge {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background-color: var(--metro-blue);
+}
+
+.report-create__user {
+  font-size: 14px;
+  color: var(--metro-text);
+  font-weight: 600;
+  margin-left: 4px;
 }
 
 .report-create__top {

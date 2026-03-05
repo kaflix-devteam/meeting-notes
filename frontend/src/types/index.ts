@@ -1,6 +1,14 @@
+export interface Department {
+  id: number
+  code: string
+  name: string
+}
+
 export interface Team {
   id: number
+  code: string
   name: string
+  department_id: number
 }
 
 export interface Report {
@@ -34,14 +42,30 @@ export interface FinalReport {
 }
 
 export interface CreateReportPayload {
-  team_id: number
   content_html: string
   report_date: string
   user_id: number
 }
 
 export interface UpdateReportPayload {
-  team_id?: number
   content_html?: string
   report_date?: string
+}
+
+export interface SignupPayload {
+  username: string
+  password: string
+  display_name: string
+  team_id: number
+}
+
+export interface User {
+  id: number
+  username: string
+  display_name: string
+  is_admin?: boolean
+  team_id: number
+  team_name?: string
+  department_id?: number
+  department_name?: string
 }

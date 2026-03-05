@@ -1,22 +1,38 @@
 import pool from '../config/database';
-import { ResultSetHeader } from 'mysql2';
+import { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { ReportWithTeam } from '../models/types';
-import { getReportsByDate } from './reportService';
 import { generateMergeSummary } from './aiService';
 import { embedReport } from './ragService';
 
 /**
- * 수동 병합: 사용자가 명시적으로 트리거하는 최종보고서 병합.
- * 원본 보고서 내용을 수정하지 않고 구조적 병합만 수행한다.
+ * 수동 병합: 날짜 + 소속 기준으로 최종보고서 병합.
+ * 같은 소속 내 여러 팀의 보고서를 팀별로 그룹핑하여 1개로 합친다.
  */
-export async function mergeReportsManual(reportDate: string): Promise<void> {
-  // 1. 해당 날짜 보고서 수집
-  const reports = await getReportsByDate(reportDate);
+export async function mergeReportsManual(
+  reportDate: string,
+  departmentId: number
+): Promise<void> {
+  // 1. 해당 날짜 + 소속의 모든 보고서 수집
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT r.*, t.code AS team_code, t.name AS team_name,
+            d.name AS department_name,
+            u.display_name AS user_display_name
+     FROM reports r
+     JOIN teams t ON r.team_id = t.id
+     LEFT JOIN departments d ON r.department_id = d.id
+     JOIN users u ON r.user_id = u.id
+     WHERE r.report_date = ? AND r.department_id = ?
+     ORDER BY t.name, r.created_at`,
+    [reportDate, departmentId]
+  );
+  const reports = rows as ReportWithTeam[];
 
   if (reports.length === 0) {
-    console.log(`[mergeService] No reports found for date ${reportDate}`);
+    console.log(`[mergeService] No reports found for date=${reportDate}, dept=${departmentId}`);
     return;
   }
+
+  const deptName = (reports[0] as any).department_name || '';
 
   // 2. 팀별 그룹핑
   const teamGroups = new Map<number, ReportWithTeam[]>();
@@ -26,7 +42,7 @@ export async function mergeReportsManual(reportDate: string): Promise<void> {
     teamGroups.set(report.team_id, existing);
   }
 
-  // 3. 팀 메타데이터로 AI 요약문 생성 (토큰 최소화: 팀 이름+건수만 전달)
+  // 3. 팀 메타데이터
   const teamsMeta: { code: string; name: string; count: number; reports: ReportWithTeam[] }[] = [];
   for (const [, teamReports] of teamGroups) {
     const first = teamReports[0];
@@ -38,16 +54,23 @@ export async function mergeReportsManual(reportDate: string): Promise<void> {
     });
   }
 
+  // 4. AI 요약문 생성
   const summary = await generateMergeSummary(
     teamsMeta.map((t) => ({ name: t.name, count: t.count })),
     reportDate
   );
 
-  // 4. HTML 프로그래밍적 조립 (원본 내용 그대로 삽입)
+  // 5. HTML 조립 (팀별 섹션)
   const teamSections = teamsMeta
     .map((team) => {
       const reportsHtml = team.reports
-        .map((r) => r.content_html)
+        .map((r) => {
+          const userName = (r as any).user_display_name || '';
+          return `<div class="report-item">
+      <p class="report-author"><strong>${userName}</strong></p>
+      ${r.content_html}
+    </div>`;
+        })
         .join('\n<hr/>\n');
 
       return `<section class="team-section" data-team="${team.code}">
@@ -59,6 +82,7 @@ export async function mergeReportsManual(reportDate: string): Promise<void> {
 
   const mergedHtml = `<div class="final-report">
   <h1>업무보고서 - ${reportDate}</h1>
+  <h2>${deptName}</h2>
   <div class="overall-summary">
     <p>${summary}</p>
   </div>
@@ -66,30 +90,31 @@ export async function mergeReportsManual(reportDate: string): Promise<void> {
   ${teamSections}
 </div>`;
 
-  // 5. team_summary JSON 구성
+  // 6. team_summary JSON
   const teamSummary: Record<string, unknown> = {};
   for (const team of teamsMeta) {
     teamSummary[team.code] = {
       teamName: team.name,
+      departmentName: deptName,
       reportCount: team.count,
     };
   }
 
-  // 6. UPSERT final_reports
+  // 7. UPSERT final_reports (날짜+소속 기준)
   await pool.query<ResultSetHeader>(
-    `INSERT INTO final_reports (report_date, content_html, team_summary)
-     VALUES (?, ?, ?)
+    `INSERT INTO final_reports (report_date, department_id, team_id, content_html, team_summary)
+     VALUES (?, ?, NULL, ?, ?)
      ON DUPLICATE KEY UPDATE
        content_html = VALUES(content_html),
        team_summary = VALUES(team_summary)`,
-    [reportDate, mergedHtml, JSON.stringify(teamSummary)]
+    [reportDate, departmentId, mergedHtml, JSON.stringify(teamSummary)]
   );
 
   console.log(
-    `[mergeService] Final report for ${reportDate} merged with ${teamsMeta.length} team(s), ${reports.length} report(s)`
+    `[mergeService] Final report for ${reportDate} dept=${departmentId} merged with ${teamsMeta.length} team(s), ${reports.length} report(s)`
   );
 
-  // 7. 비동기 임베딩
+  // 8. 비동기 임베딩
   for (const report of reports) {
     embedReport(report.id, report.content_html).catch((err) => {
       console.error(

@@ -4,6 +4,18 @@ const router = createRouter({
   history: createWebHistory('/meeting'),
   routes: [
     {
+      path: '/login',
+      name: 'login',
+      component: () => import('../views/LoginPage.vue'),
+      meta: { public: true },
+    },
+    {
+      path: '/signup',
+      name: 'signup',
+      component: () => import('../views/SignupPage.vue'),
+      meta: { public: true },
+    },
+    {
       path: '/',
       name: 'home',
       component: () => import('../views/HomePage.vue'),
@@ -33,7 +45,36 @@ const router = createRouter({
       name: 'my-reports',
       component: () => import('../views/MyReportsPage.vue'),
     },
+    {
+      path: '/admin/users',
+      name: 'user-management',
+      component: () => import('../views/UserManagementPage.vue'),
+    },
+    {
+      path: '/admin/teams',
+      name: 'team-management',
+      component: () => import('../views/TeamManagementPage.vue'),
+    },
   ],
+})
+
+router.beforeEach((to) => {
+  const isPublic = to.meta.public === true
+  const raw = localStorage.getItem('meeting_user')
+  const hasUser = !!raw
+
+  if (!isPublic && !hasUser) {
+    return { name: 'login' }
+  }
+
+  if (to.meta.admin === true && raw) {
+    try {
+      const user = JSON.parse(raw)
+      if (!user.is_admin) return { name: 'home' }
+    } catch {
+      return { name: 'home' }
+    }
+  }
 })
 
 export default router

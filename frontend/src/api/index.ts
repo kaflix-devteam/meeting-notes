@@ -1,10 +1,13 @@
 import axios from 'axios'
 import type {
+  Department,
   Team,
   Report,
   FinalReport,
   CreateReportPayload,
   UpdateReportPayload,
+  SignupPayload,
+  User,
 } from '../types'
 
 const api = axios.create({
@@ -14,16 +17,67 @@ const api = axios.create({
   },
 })
 
-export function getTeams() {
+export function getDepartments() {
+  return api.get<Department[]>('/teams/departments')
+}
+
+export function getTeams(departmentId?: number) {
+  if (departmentId) {
+    return api.get<Team[]>('/teams', { params: { department_id: departmentId } })
+  }
   return api.get<Team[]>('/teams')
+}
+
+export function signup(data: SignupPayload) {
+  return api.post<User>('/auth/signup', data)
+}
+
+export function login(username: string, password: string) {
+  return api.post<User>('/auth/login', { username, password })
+}
+
+export function getUsers() {
+  return api.get<User[]>('/auth/users')
+}
+
+export function updateUserTeam(userId: number, teamId: number) {
+  return api.put<User>(`/auth/users/${userId}`, { team_id: teamId })
+}
+
+export function deleteUser(userId: number) {
+  return api.delete(`/auth/users/${userId}`)
+}
+
+export function getAllTeams() {
+  return api.get('/teams/all')
+}
+
+export function createTeam(departmentName: string, teamName: string, departmentColor?: string, teamColor?: string) {
+  return api.post('/teams', { department_name: departmentName, team_name: teamName, department_color: departmentColor, team_color: teamColor })
+}
+
+export function updateTeam(id: number, departmentName: string, teamName: string, departmentColor?: string, teamColor?: string) {
+  return api.put(`/teams/${id}`, { department_name: departmentName, team_name: teamName, department_color: departmentColor, team_color: teamColor })
+}
+
+export function deleteTeam(id: number) {
+  return api.delete(`/teams/${id}`)
+}
+
+export function deleteFinalReport(id: number) {
+  return api.delete(`/final-reports/${id}`)
 }
 
 export function createReport(data: CreateReportPayload) {
   return api.post<Report>('/reports', data)
 }
 
-export function getMyReports(userId: number = 1) {
+export function getMyReports(userId?: number) {
   return api.get<Report[]>('/reports', { params: { user_id: userId } })
+}
+
+export function getAllReports() {
+  return api.get<Report[]>('/reports', { params: { all: 'true' } })
 }
 
 export function getReport(id: number) {
@@ -62,8 +116,11 @@ export function uploadImage(file: File | Blob) {
   })
 }
 
-export function mergeFinalReport(reportDate: string) {
-  return api.post<{ message: string }>('/final-reports/merge', { report_date: reportDate })
+export function mergeFinalReport(reportDate: string, departmentId: number) {
+  return api.post<{ message: string }>('/final-reports/merge', {
+    report_date: reportDate,
+    department_id: departmentId,
+  })
 }
 
 export function getFinalReports() {

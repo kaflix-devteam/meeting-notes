@@ -1,14 +1,19 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
-import { RowDataPacket } from 'mysql2';
+import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { mergeReportsManual } from '../services/mergeService';
 
 export async function getFinalReports(_req: Request, res: Response): Promise<void> {
   try {
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, DATE_FORMAT(report_date, '%Y-%m-%d') AS report_date, team_summary, created_at, updated_at
-       FROM final_reports
-       ORDER BY report_date DESC`
+      `SELECT f.id, DATE_FORMAT(f.report_date, '%Y-%m-%d') AS report_date,
+              f.department_id, f.team_id, f.team_summary, f.created_at, f.updated_at,
+              d.name AS department_name, d.color AS department_color,
+              t.name AS team_name, t.color AS team_color
+       FROM final_reports f
+       LEFT JOIN departments d ON f.department_id = d.id
+       LEFT JOIN teams t ON f.team_id = t.id
+       ORDER BY f.report_date DESC, d.name, t.name`
     );
     const result = rows.map((row: any) => {
       const summary = typeof row.team_summary === 'string'
@@ -36,8 +41,14 @@ export async function getFinalReportById(req: Request, res: Response): Promise<v
     }
 
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, DATE_FORMAT(report_date, '%Y-%m-%d') AS report_date, content_html, team_summary, created_at, updated_at
-       FROM final_reports WHERE id = ?`,
+      `SELECT f.id, DATE_FORMAT(f.report_date, '%Y-%m-%d') AS report_date, f.content_html, f.team_summary,
+              f.department_id, f.team_id, f.created_at, f.updated_at,
+              d.name AS department_name, d.color AS department_color,
+              t.name AS team_name, t.color AS team_color
+       FROM final_reports f
+       LEFT JOIN departments d ON f.department_id = d.id
+       LEFT JOIN teams t ON f.team_id = t.id
+       WHERE f.id = ?`,
       [id]
     );
 
@@ -61,16 +72,41 @@ export async function getFinalReportById(req: Request, res: Response): Promise<v
   }
 }
 
-export async function mergeFinalReport(req: Request, res: Response): Promise<void> {
+export async function deleteFinalReport(req: Request, res: Response): Promise<void> {
   try {
-    const { report_date } = req.body;
-
-    if (!report_date) {
-      res.status(400).json({ error: 'report_date is required' });
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: 'Invalid final report ID' });
       return;
     }
 
-    await mergeReportsManual(report_date);
+    const [result] = await pool.query<ResultSetHeader>(
+      'DELETE FROM final_reports WHERE id = ?',
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      res.status(404).json({ error: 'Final report not found' });
+      return;
+    }
+
+    res.json({ message: '최종보고서가 삭제되었습니다.' });
+  } catch (error) {
+    console.error('[finalReportController] deleteFinalReport error:', error);
+    res.status(500).json({ error: '최종보고서 삭제에 실패했습니다.' });
+  }
+}
+
+export async function mergeFinalReport(req: Request, res: Response): Promise<void> {
+  try {
+    const { report_date, department_id } = req.body;
+
+    if (!report_date || !department_id) {
+      res.status(400).json({ error: 'report_date, department_id are required' });
+      return;
+    }
+
+    await mergeReportsManual(report_date, department_id);
     res.json({ message: '최종보고서에 병합되었습니다.' });
   } catch (error) {
     console.error('[finalReportController] mergeFinalReport error:', error);

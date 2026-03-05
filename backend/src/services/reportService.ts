@@ -4,14 +4,23 @@ import { Report, ReportWithTeam, Attachment } from '../models/types';
 
 export async function createReport(
   userId: number,
-  teamId: number,
   reportDate: string,
   contentHtml: string
 ): Promise<Report> {
+  // user의 team_id, department_id 조회
+  const [userRows] = await pool.query<RowDataPacket[]>(
+    `SELECT u.team_id, t.department_id
+     FROM users u JOIN teams t ON u.team_id = t.id
+     WHERE u.id = ?`,
+    [userId]
+  );
+  if (userRows.length === 0) throw new Error('User not found');
+  const { team_id: teamId, department_id: departmentId } = userRows[0];
+
   const [result] = await pool.query<ResultSetHeader>(
-    `INSERT INTO reports (user_id, team_id, report_date, content_html)
-     VALUES (?, ?, ?, ?)`,
-    [userId, teamId, reportDate, contentHtml]
+    `INSERT INTO reports (user_id, team_id, department_id, report_date, content_html)
+     VALUES (?, ?, ?, ?, ?)`,
+    [userId, teamId, departmentId, reportDate, contentHtml]
   );
   const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM reports WHERE id = ?', [result.insertId]);
   return rows[0] as Report;
@@ -19,11 +28,15 @@ export async function createReport(
 
 export async function getReportById(id: number): Promise<ReportWithTeam | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT r.id, r.user_id, r.team_id, DATE_FORMAT(r.report_date, '%Y-%m-%d') AS report_date,
+    `SELECT r.id, r.user_id, r.team_id, r.department_id, DATE_FORMAT(r.report_date, '%Y-%m-%d') AS report_date,
             r.content_html, r.created_at, r.updated_at,
-            t.code AS team_code, t.name AS team_name, u.display_name AS user_display_name
+            t.code AS team_code, t.name AS team_name,
+            d.name AS department_name, d.color AS department_color,
+            t.color AS team_color,
+            u.display_name AS user_display_name
      FROM reports r
      JOIN teams t ON r.team_id = t.id
+     LEFT JOIN departments d ON r.department_id = d.id
      JOIN users u ON r.user_id = u.id
      WHERE r.id = ?`,
     [id]
@@ -33,11 +46,15 @@ export async function getReportById(id: number): Promise<ReportWithTeam | null> 
 
 export async function getReportsByUserId(userId: number): Promise<ReportWithTeam[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT r.id, r.user_id, r.team_id, DATE_FORMAT(r.report_date, '%Y-%m-%d') AS report_date,
+    `SELECT r.id, r.user_id, r.team_id, r.department_id, DATE_FORMAT(r.report_date, '%Y-%m-%d') AS report_date,
             r.content_html, r.created_at, r.updated_at,
-            t.code AS team_code, t.name AS team_name, u.display_name AS user_display_name
+            t.code AS team_code, t.name AS team_name,
+            d.name AS department_name, d.color AS department_color,
+            t.color AS team_color,
+            u.display_name AS user_display_name
      FROM reports r
      JOIN teams t ON r.team_id = t.id
+     LEFT JOIN departments d ON r.department_id = d.id
      JOIN users u ON r.user_id = u.id
      WHERE r.user_id = ?
      ORDER BY r.report_date DESC, r.created_at DESC`,
@@ -46,15 +63,31 @@ export async function getReportsByUserId(userId: number): Promise<ReportWithTeam
   return rows as ReportWithTeam[];
 }
 
+export async function getAllReports(): Promise<ReportWithTeam[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT r.id, r.user_id, r.team_id, r.department_id, DATE_FORMAT(r.report_date, '%Y-%m-%d') AS report_date,
+            r.content_html, r.created_at, r.updated_at,
+            t.code AS team_code, t.name AS team_name,
+            d.name AS department_name, d.color AS department_color,
+            t.color AS team_color,
+            u.display_name AS user_display_name
+     FROM reports r
+     JOIN teams t ON r.team_id = t.id
+     LEFT JOIN departments d ON r.department_id = d.id
+     JOIN users u ON r.user_id = u.id
+     ORDER BY r.report_date DESC, r.created_at DESC`
+  );
+  return rows as ReportWithTeam[];
+}
+
 export async function updateReport(
   id: number,
   contentHtml: string,
-  teamId: number,
   reportDate: string
 ): Promise<Report | null> {
   await pool.query<ResultSetHeader>(
-    `UPDATE reports SET content_html = ?, team_id = ?, report_date = ? WHERE id = ?`,
-    [contentHtml, teamId, reportDate, id]
+    `UPDATE reports SET content_html = ?, report_date = ? WHERE id = ?`,
+    [contentHtml, reportDate, id]
   );
   const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM reports WHERE id = ?', [id]);
   return (rows[0] as Report) || null;

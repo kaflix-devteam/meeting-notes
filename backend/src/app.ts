@@ -11,6 +11,7 @@ import reportsRouter from './routes/reports';
 import finalReportsRouter from './routes/finalReports';
 import attachmentsRouter from './routes/attachments';
 import imagesRouter from './routes/images';
+import authRouter from './routes/auth';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -32,6 +33,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/final-reports', finalReportsRouter);
 app.use('/api/attachments', attachmentsRouter);
 app.use('/api/images', imagesRouter);
+app.use('/api/auth', authRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

@@ -4,20 +4,20 @@ import { polishReport as polishReportAI } from '../services/aiService';
 
 export async function createReport(req: Request, res: Response): Promise<void> {
   try {
-    const { team_id, report_date, content_html, user_id } = req.body;
+    const { report_date, content_html, user_id } = req.body;
 
-    if (!team_id || !report_date || !content_html || !user_id) {
-      res.status(400).json({ error: 'Missing required fields: team_id, report_date, content_html, user_id' });
+    if (!report_date || !content_html || !user_id) {
+      res.status(400).json({ error: 'Missing required fields: report_date, content_html, user_id' });
       return;
     }
 
-    const report = await reportService.createReport(user_id, team_id, report_date, content_html);
+    const report = await reportService.createReport(user_id, report_date, content_html);
 
     res.status(201).json(report);
   } catch (error: any) {
     console.error('[reportController] createReport error:', error);
-    if (error.code === '23505') {
-      res.status(409).json({ error: 'A report already exists for this team/date/user combination' });
+    if (error.code === '23505' || error.errno === 1062) {
+      res.status(409).json({ error: '이 날짜에 이미 보고서가 존재합니다.' });
       return;
     }
     res.status(500).json({ error: 'Failed to create report' });
@@ -26,6 +26,13 @@ export async function createReport(req: Request, res: Response): Promise<void> {
 
 export async function getReports(req: Request, res: Response): Promise<void> {
   try {
+    const all = req.query.all === 'true';
+    if (all) {
+      const reports = await reportService.getAllReports();
+      res.json(reports);
+      return;
+    }
+
     const userId = parseInt(req.query.user_id as string, 10);
     if (isNaN(userId)) {
       res.status(400).json({ error: 'user_id query parameter is required' });
@@ -91,13 +98,13 @@ export async function updateReport(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const { content_html, team_id, report_date } = req.body;
-    if (!content_html || !team_id || !report_date) {
-      res.status(400).json({ error: 'Missing required fields: content_html, team_id, report_date' });
+    const { content_html, report_date } = req.body;
+    if (!content_html || !report_date) {
+      res.status(400).json({ error: 'Missing required fields: content_html, report_date' });
       return;
     }
 
-    const updated = await reportService.updateReport(id, content_html, team_id, report_date);
+    const updated = await reportService.updateReport(id, content_html, report_date);
     if (!updated) {
       res.status(404).json({ error: 'Report not found' });
       return;

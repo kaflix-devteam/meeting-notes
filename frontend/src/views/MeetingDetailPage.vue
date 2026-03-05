@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getFinalReport } from '../api'
+import { useAuthStore } from '../stores/authStore'
+import { getFinalReport, deleteFinalReport } from '../api'
 import type { FinalReport } from '../types'
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const report = ref<FinalReport | null>(null)
 const loading = ref(true)
+const deleting = ref(false)
 const errorMsg = ref('')
 
 onMounted(async () => {
@@ -21,13 +24,38 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+async function handleDelete() {
+  if (!report.value) return
+  if (!confirm('정말 이 최종보고서를 삭제하시겠습니까?')) return
+
+  deleting.value = true
+  try {
+    await deleteFinalReport(report.value.id)
+    router.push('/meetings')
+  } catch (e: any) {
+    errorMsg.value = e.response?.data?.error || '삭제에 실패했습니다.'
+  } finally {
+    deleting.value = false
+  }
+}
 </script>
 
 <template>
   <div class="meeting-detail">
-    <button class="metro-btn metro-btn--outline" @click="router.push('/meetings')">
-      &larr; Back to List
-    </button>
+    <div class="meeting-detail__top-actions">
+      <button class="metro-btn metro-btn--outline" @click="router.push('/meetings')">
+        &larr; Back to List
+      </button>
+      <button
+        v-if="auth.isAdmin && report"
+        class="metro-btn metro-btn--red"
+        :disabled="deleting"
+        @click="handleDelete"
+      >
+        {{ deleting ? '삭제 중...' : '삭제' }}
+      </button>
+    </div>
 
     <div v-if="loading" class="metro-loading">Loading...</div>
 
@@ -54,7 +82,10 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.meeting-detail .metro-btn--outline {
+.meeting-detail__top-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 24px;
 }
 
