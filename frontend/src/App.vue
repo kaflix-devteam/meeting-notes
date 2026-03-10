@@ -14,14 +14,13 @@ function handleLogout() {
 <template>
   <div class="metro-app">
     <header v-if="auth.isLoggedIn" class="metro-header">
-      <h1 class="metro-title" @click="router.push('/')">Meeting Agent</h1>
+      <h1 class="metro-title" @click="router.push('/my-reports')">보고또보고서</h1>
       <nav class="metro-nav">
-        <router-link to="/">Home</router-link>
-        <router-link to="/meetings">Meetings</router-link>
-        <router-link to="/reports/new">New Report</router-link>
-        <router-link to="/my-reports">My Reports</router-link>
-        <router-link to="/admin/users">Users</router-link>
-        <router-link to="/admin/teams">Teams</router-link>
+        <router-link to="/meetings">최종 보고서</router-link>
+        <router-link to="/reports/new">새로 작성하기</router-link>
+        <router-link to="/my-reports">내 보고서</router-link>
+        <router-link to="/admin/users">사용자</router-link>
+        <router-link to="/admin/teams">팀</router-link>
       </nav>
       <div class="metro-user">
         <span class="metro-user__name">{{ auth.user?.display_name }}</span>

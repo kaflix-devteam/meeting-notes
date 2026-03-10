@@ -45,11 +45,13 @@ export interface CreateReportPayload {
   content_html: string
   report_date: string
   user_id: number
+  team_id?: number
 }
 
 export interface UpdateReportPayload {
   content_html?: string
   report_date?: string
+  team_id?: number
 }
 
 export interface SignupPayload {
@@ -66,6 +68,8 @@ export interface User {
   is_admin?: boolean
   team_id: number
   team_name?: string
+  team_color?: string
   department_id?: number
   department_name?: string
+  department_color?: string
 }

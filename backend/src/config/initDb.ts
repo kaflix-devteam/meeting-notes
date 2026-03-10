@@ -104,6 +104,8 @@ const migrations = [
   `ALTER TABLE final_reports ADD UNIQUE KEY uq_final_date_dept (report_date, department_id)`,
   `ALTER TABLE departments ADD COLUMN color VARCHAR(7) NOT NULL DEFAULT '#5c2d91'`,
   `ALTER TABLE teams ADD COLUMN color VARCHAR(7) NOT NULL DEFAULT '#107c10'`,
+  // reports의 department_id를 팀의 현재 소속으로 동기화
+  `UPDATE reports r JOIN teams t ON r.team_id = t.id SET r.department_id = t.department_id WHERE r.department_id IS NULL OR r.department_id != t.department_id`,
 ];
 
 // 시드 데이터

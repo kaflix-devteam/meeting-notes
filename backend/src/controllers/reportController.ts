@@ -4,14 +4,14 @@ import { polishReport as polishReportAI } from '../services/aiService';
 
 export async function createReport(req: Request, res: Response): Promise<void> {
   try {
-    const { report_date, content_html, user_id } = req.body;
+    const { report_date, content_html, user_id, team_id } = req.body;
 
     if (!report_date || !content_html || !user_id) {
       res.status(400).json({ error: 'Missing required fields: report_date, content_html, user_id' });
       return;
     }
 
-    const report = await reportService.createReport(user_id, report_date, content_html);
+    const report = await reportService.createReport(user_id, report_date, content_html, team_id || undefined);
 
     res.status(201).json(report);
   } catch (error: any) {
@@ -98,13 +98,13 @@ export async function updateReport(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const { content_html, report_date } = req.body;
+    const { content_html, report_date, team_id } = req.body;
     if (!content_html || !report_date) {
       res.status(400).json({ error: 'Missing required fields: content_html, report_date' });
       return;
     }
 
-    const updated = await reportService.updateReport(id, content_html, report_date);
+    const updated = await reportService.updateReport(id, content_html, report_date, team_id || undefined);
     if (!updated) {
       res.status(404).json({ error: 'Report not found' });
       return;
@@ -117,16 +117,34 @@ export async function updateReport(req: Request, res: Response): Promise<void> {
   }
 }
 
+export async function getPreviousWeekReport(req: Request, res: Response): Promise<void> {
+  try {
+    const userId = parseInt(req.query.user_id as string, 10);
+    const reportDate = req.query.report_date as string;
+
+    if (isNaN(userId) || !reportDate) {
+      res.status(400).json({ error: 'user_id and report_date are required' });
+      return;
+    }
+
+    const report = await reportService.getPreviousWeekReport(userId, reportDate);
+    res.json(report);
+  } catch (error) {
+    console.error('[reportController] getPreviousWeekReport error:', error);
+    res.status(500).json({ error: 'Failed to fetch previous week report' });
+  }
+}
+
 export async function polishReport(req: Request, res: Response): Promise<void> {
   try {
-    const { content_html } = req.body;
+    const { content_html, previous_content_html } = req.body;
 
     if (!content_html || content_html === '<p></p>') {
       res.status(400).json({ error: '다듬을 내용이 없습니다.' });
       return;
     }
 
-    const polished = await polishReportAI(content_html);
+    const polished = await polishReportAI(content_html, previous_content_html || undefined);
     res.json({ content_html: polished });
   } catch (error) {
     console.error('[reportController] polishReport error:', error);

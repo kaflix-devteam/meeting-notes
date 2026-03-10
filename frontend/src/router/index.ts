@@ -17,8 +17,7 @@ const router = createRouter({
     },
     {
       path: '/',
-      name: 'home',
-      component: () => import('../views/HomePage.vue'),
+      redirect: '/my-reports',
     },
     {
       path: '/reports/new',
@@ -70,9 +69,9 @@ router.beforeEach((to) => {
   if (to.meta.admin === true && raw) {
     try {
       const user = JSON.parse(raw)
-      if (!user.is_admin) return { name: 'home' }
+      if (!user.is_admin) return { name: 'my-reports' }
     } catch {
-      return { name: 'home' }
+      return { name: 'my-reports' }
     }
   }
 })

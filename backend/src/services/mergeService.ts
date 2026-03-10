@@ -1,8 +1,8 @@
 import pool from '../config/database';
 import { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { ReportWithTeam } from '../models/types';
-import { generateMergeSummary } from './aiService';
 import { embedReport } from './ragService';
+import { standardizeForMerge } from './aiService';
 
 /**
  * 수동 병합: 날짜 + 소속 기준으로 최종보고서 병합.
@@ -11,17 +11,17 @@ import { embedReport } from './ragService';
 export async function mergeReportsManual(
   reportDate: string,
   departmentId: number
-): Promise<void> {
-  // 1. 해당 날짜 + 소속의 모든 보고서 수집
+): Promise<number> {
+  // 1. 해당 날짜 + 소속의 모든 보고서 수집 (팀의 현재 소속 기준)
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT r.*, t.code AS team_code, t.name AS team_name,
             d.name AS department_name,
             u.display_name AS user_display_name
      FROM reports r
      JOIN teams t ON r.team_id = t.id
-     LEFT JOIN departments d ON r.department_id = d.id
+     JOIN departments d ON t.department_id = d.id
      JOIN users u ON r.user_id = u.id
-     WHERE r.report_date = ? AND r.department_id = ?
+     WHERE r.report_date = ? AND t.department_id = ?
      ORDER BY t.name, r.created_at`,
     [reportDate, departmentId]
   );
@@ -29,7 +29,7 @@ export async function mergeReportsManual(
 
   if (reports.length === 0) {
     console.log(`[mergeService] No reports found for date=${reportDate}, dept=${departmentId}`);
-    return;
+    return 0;
   }
 
   const deptName = (reports[0] as any).department_name || '';
@@ -54,40 +54,60 @@ export async function mergeReportsManual(
     });
   }
 
-  // 4. AI 요약문 생성
-  const summary = await generateMergeSummary(
-    teamsMeta.map((t) => ({ name: t.name, count: t.count })),
-    reportDate
+  // 4. AI로 개별 보고서 양식 통일
+  console.log(`[mergeService] Standardizing ${reports.length} report(s)...`);
+  const standardizedMap = new Map<number, string>();
+  await Promise.all(
+    reports.map(async (r) => {
+      const userName = (r as any).user_display_name || '';
+      const standardized = await standardizeForMerge(r.content_html, userName);
+      standardizedMap.set(r.id, standardized);
+    })
   );
 
-  // 5. HTML 조립 (팀별 섹션)
+  // 5. HTML 조립 — 통일 양식
+  const totalMembers = reports.length;
+  const teamCount = teamsMeta.length;
+
   const teamSections = teamsMeta
     .map((team) => {
-      const reportsHtml = team.reports
+      const memberRows = team.reports
         .map((r) => {
           const userName = (r as any).user_display_name || '';
-          return `<div class="report-item">
-      <p class="report-author"><strong>${userName}</strong></p>
-      ${r.content_html}
-    </div>`;
+          const content = standardizedMap.get(r.id) || r.content_html;
+          return `<div class="fr-member">
+          <div class="fr-member__name">${userName}</div>
+          <div class="fr-member__content">${content}</div>
+        </div>`;
         })
-        .join('\n<hr/>\n');
+        .join('\n');
 
-      return `<section class="team-section" data-team="${team.code}">
-    <h2>${team.name}</h2>
-    <div class="report-content">${reportsHtml}</div>
-  </section>`;
+      return `<section class="fr-team" data-team="${team.code}">
+      <div class="fr-team__header">
+        <h3>${team.name}</h3>
+        <span class="fr-team__count">${team.count}명</span>
+      </div>
+      <div class="fr-team__members">
+        ${memberRows}
+      </div>
+    </section>`;
     })
-    .join('\n\n  ');
+    .join('\n');
 
   const mergedHtml = `<div class="final-report">
-  <h1>업무보고서 - ${reportDate}</h1>
-  <h2>${deptName}</h2>
-  <div class="overall-summary">
-    <p>${summary}</p>
+  <div class="fr-header">
+    <h1>주간 업무보고서</h1>
+    <table class="fr-meta">
+      <tr><th>보고일자</th><td>${reportDate}</td></tr>
+      <tr><th>소속</th><td>${deptName}</td></tr>
+      <tr><th>참여팀</th><td>${teamsMeta.map(t => t.name).join(', ')}</td></tr>
+      <tr><th>보고인원</th><td>${totalMembers}명 (${teamCount}개 팀)</td></tr>
+    </table>
   </div>
 
-  ${teamSections}
+  <div class="fr-body">
+    ${teamSections}
+  </div>
 </div>`;
 
   // 6. team_summary JSON
@@ -123,4 +143,6 @@ export async function mergeReportsManual(
       );
     });
   }
+
+  return reports.length;
 }

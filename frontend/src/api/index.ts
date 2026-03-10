@@ -84,6 +84,10 @@ export function getReport(id: number) {
   return api.get<Report>(`/reports/${id}`)
 }
 
+export function getPreviousWeekReport(userId: number, reportDate: string) {
+  return api.get<Report | null>('/reports/previous', { params: { user_id: userId, report_date: reportDate } })
+}
+
 export function updateReport(id: number, data: UpdateReportPayload) {
   return api.put<Report>(`/reports/${id}`, data)
 }
@@ -92,8 +96,8 @@ export function deleteReport(id: number) {
   return api.delete(`/reports/${id}`)
 }
 
-export function polishReport(contentHtml: string) {
-  return api.post<{ content_html: string }>('/reports/polish', { content_html: contentHtml })
+export function polishReport(contentHtml: string, previousContentHtml?: string) {
+  return api.post<{ content_html: string }>('/reports/polish', { content_html: contentHtml, previous_content_html: previousContentHtml })
 }
 
 export function uploadAttachment(reportId: number, file: File) {
@@ -116,10 +120,10 @@ export function uploadImage(file: File | Blob) {
   })
 }
 
-export function mergeFinalReport(reportDate: string, departmentId: number) {
+export function mergeFinalReport(reportDate: string, departmentId?: number) {
   return api.post<{ message: string }>('/final-reports/merge', {
     report_date: reportDate,
-    department_id: departmentId,
+    ...(departmentId ? { department_id: departmentId } : {}),
   })
 }
 
@@ -129,6 +133,19 @@ export function getFinalReports() {
 
 export function getFinalReport(id: number) {
   return api.get<FinalReport>(`/final-reports/${id}`)
+}
+
+export function getPreviousFinalReport(reportDate: string, departmentId: number) {
+  return api.get<FinalReport | null>('/final-reports/previous', { params: { report_date: reportDate, department_id: departmentId } })
+}
+
+export function analyzeWeeklyComparison(currentHtml: string, previousHtml: string, currentDate: string, previousDate: string) {
+  return api.post<{ analysis_html: string }>('/final-reports/analyze', {
+    current_html: currentHtml,
+    previous_html: previousHtml,
+    current_date: currentDate,
+    previous_date: previousDate,
+  })
 }
 
 export default api

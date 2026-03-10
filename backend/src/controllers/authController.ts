@@ -56,7 +56,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     }
 
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT u.id, u.username, u.display_name, u.is_admin, u.team_id, t.name as team_name, d.id as department_id, d.name as department_name
+      `SELECT u.id, u.username, u.display_name, u.is_admin, u.team_id, t.name as team_name, t.color as team_color, d.id as department_id, d.name as department_name, d.color as department_color
        FROM users u
        JOIN teams t ON u.team_id = t.id
        JOIN departments d ON t.department_id = d.id
@@ -77,8 +77,10 @@ export async function login(req: Request, res: Response): Promise<void> {
       is_admin: !!user.is_admin,
       team_id: user.team_id,
       team_name: user.team_name,
+      team_color: user.team_color,
       department_id: user.department_id,
       department_name: user.department_name,
+      department_color: user.department_color,
     });
   } catch (error) {
     console.error('[authController] login error:', error);

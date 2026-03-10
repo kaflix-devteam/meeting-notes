@@ -5,17 +5,33 @@ import { Report, ReportWithTeam, Attachment } from '../models/types';
 export async function createReport(
   userId: number,
   reportDate: string,
-  contentHtml: string
+  contentHtml: string,
+  overrideTeamId?: number
 ): Promise<Report> {
-  // user의 team_id, department_id 조회
-  const [userRows] = await pool.query<RowDataPacket[]>(
-    `SELECT u.team_id, t.department_id
-     FROM users u JOIN teams t ON u.team_id = t.id
-     WHERE u.id = ?`,
-    [userId]
-  );
-  if (userRows.length === 0) throw new Error('User not found');
-  const { team_id: teamId, department_id: departmentId } = userRows[0];
+  let teamId: number;
+  let departmentId: number;
+
+  if (overrideTeamId) {
+    // 지정된 팀 사용
+    const [teamRows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, department_id FROM teams WHERE id = ?`,
+      [overrideTeamId]
+    );
+    if (teamRows.length === 0) throw new Error('Team not found');
+    teamId = teamRows[0].id;
+    departmentId = teamRows[0].department_id;
+  } else {
+    // user의 team_id, department_id 조회
+    const [userRows] = await pool.query<RowDataPacket[]>(
+      `SELECT u.team_id, t.department_id
+       FROM users u JOIN teams t ON u.team_id = t.id
+       WHERE u.id = ?`,
+      [userId]
+    );
+    if (userRows.length === 0) throw new Error('User not found');
+    teamId = userRows[0].team_id;
+    departmentId = userRows[0].department_id;
+  }
 
   const [result] = await pool.query<ResultSetHeader>(
     `INSERT INTO reports (user_id, team_id, department_id, report_date, content_html)
@@ -83,12 +99,31 @@ export async function getAllReports(): Promise<ReportWithTeam[]> {
 export async function updateReport(
   id: number,
   contentHtml: string,
-  reportDate: string
+  reportDate: string,
+  overrideTeamId?: number
 ): Promise<Report | null> {
-  await pool.query<ResultSetHeader>(
-    `UPDATE reports SET content_html = ?, report_date = ? WHERE id = ?`,
-    [contentHtml, reportDate, id]
-  );
+  if (overrideTeamId) {
+    const [teamRows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, department_id FROM teams WHERE id = ?`,
+      [overrideTeamId]
+    );
+    if (teamRows.length > 0) {
+      await pool.query<ResultSetHeader>(
+        `UPDATE reports SET content_html = ?, report_date = ?, team_id = ?, department_id = ? WHERE id = ?`,
+        [contentHtml, reportDate, overrideTeamId, teamRows[0].department_id, id]
+      );
+    } else {
+      await pool.query<ResultSetHeader>(
+        `UPDATE reports SET content_html = ?, report_date = ? WHERE id = ?`,
+        [contentHtml, reportDate, id]
+      );
+    }
+  } else {
+    await pool.query<ResultSetHeader>(
+      `UPDATE reports SET content_html = ?, report_date = ? WHERE id = ?`,
+      [contentHtml, reportDate, id]
+    );
+  }
   const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM reports WHERE id = ?', [id]);
   return (rows[0] as Report) || null;
 }
@@ -102,6 +137,29 @@ export async function deleteReport(id: number): Promise<{ report_date: string } 
   const reportDate = rows[0].report_date;
   await pool.query('DELETE FROM reports WHERE id = ?', [id]);
   return { report_date: reportDate };
+}
+
+export async function getPreviousWeekReport(userId: number, reportDate: string): Promise<ReportWithTeam | null> {
+  // reportDate에서 7일 전 날짜 계산
+  const date = new Date(reportDate);
+  date.setDate(date.getDate() - 7);
+  const prevDate = date.toISOString().slice(0, 10);
+
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT r.id, r.user_id, r.team_id, r.department_id, DATE_FORMAT(r.report_date, '%Y-%m-%d') AS report_date,
+            r.content_html, r.created_at, r.updated_at,
+            t.code AS team_code, t.name AS team_name,
+            d.name AS department_name, d.color AS department_color,
+            t.color AS team_color,
+            u.display_name AS user_display_name
+     FROM reports r
+     JOIN teams t ON r.team_id = t.id
+     LEFT JOIN departments d ON r.department_id = d.id
+     JOIN users u ON r.user_id = u.id
+     WHERE r.user_id = ? AND r.report_date = ?`,
+    [userId, prevDate]
+  );
+  return (rows[0] as ReportWithTeam) || null;
 }
 
 export async function getReportsByDate(reportDate: string): Promise<ReportWithTeam[]> {

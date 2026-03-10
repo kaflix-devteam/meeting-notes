@@ -1,15 +1,25 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 
 const props = defineProps<{
   visible: boolean
+  mode?: 'polish' | 'merge'
 }>()
 
-const steps = [
+const polishSteps = [
   { label: '교정 전문가가 맞춤법을 검토하고 있습니다...', threshold: 33 },
   { label: '구조화 전문가가 문장 흐름을 다듬고 있습니다...', threshold: 66 },
   { label: '문체 전문가가 최종 검수 중입니다...', threshold: 99 },
 ]
+
+const mergeSteps = [
+  { label: '개별 보고서를 수집하고 있습니다...', threshold: 20 },
+  { label: 'AI가 보고서 양식을 통일하고 있습니다...', threshold: 60 },
+  { label: '최종보고서를 조립하고 있습니다...', threshold: 99 },
+]
+
+const steps = computed(() => props.mode === 'merge' ? mergeSteps : polishSteps)
+const title = computed(() => props.mode === 'merge' ? '최종보고서 병합 중' : 'AI 다듬기 진행 중')
 
 const funMessages = [
   '보고서 잘 쓰면 칼퇴 가능!',
@@ -77,7 +87,7 @@ onUnmounted(() => stop())
           <div class="polish-spinner"></div>
         </div>
 
-        <h3 class="polish-modal__title">AI 다듬기 진행 중</h3>
+        <h3 class="polish-modal__title">{{ title }}</h3>
 
         <div class="polish-steps">
           <div
