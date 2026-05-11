@@ -17,7 +17,7 @@ const router = createRouter({
     },
     {
       path: '/',
-      redirect: '/my-reports',
+      redirect: '/meetings',
     },
     {
       path: '/reports/new',
@@ -40,6 +40,26 @@ const router = createRouter({
       component: () => import('../views/MeetingDetailPage.vue'),
     },
     {
+      path: '/notes',
+      name: 'notes-list',
+      component: () => import('../views/MeetingNotesListPage.vue'),
+    },
+    {
+      path: '/notes/new',
+      name: 'note-create',
+      component: () => import('../views/MeetingNoteCreatePage.vue'),
+    },
+    {
+      path: '/notes/:id/edit',
+      name: 'note-edit',
+      component: () => import('../views/MeetingNoteEditPage.vue'),
+    },
+    {
+      path: '/notices',
+      name: 'notice-list',
+      component: () => import('../views/NoticeListPage.vue'),
+    },
+    {
       path: '/my-reports',
       name: 'my-reports',
       component: () => import('../views/MyReportsPage.vue'),
@@ -59,10 +79,11 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const isPublic = to.meta.public === true
+  const hasToken = !!to.query.token
   const raw = localStorage.getItem('meeting_user')
   const hasUser = !!raw
 
-  if (!isPublic && !hasUser) {
+  if (!isPublic && !hasToken && !hasUser) {
     return { name: 'login' }
   }
 

@@ -26,7 +26,7 @@ async function handleLogin() {
   submitting.value = true
   try {
     await auth.login(username.value.trim(), password.value)
-    router.push('/')
+    router.push('/meetings')
   } catch (e: any) {
     errorMsg.value = e.response?.data?.error || '로그인에 실패했습니다.'
   } finally {

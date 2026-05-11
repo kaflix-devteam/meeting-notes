@@ -8,6 +8,34 @@
   padding: 0;
 }
 
+/* 모든 이미지 컨테이너 넘침 방지 */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 상태 태그 (AI 다듬기 / 최종보고서 병합) */
+.status-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+  line-height: 1.4;
+}
+
+.status-done {
+  background: #107c10;
+  color: #fff;
+}
+
+.status-progress {
+  background: #0078D4;
+  color: #fff;
+}
+
 :root {
   --metro-blue: #0078d4;
   --metro-green: #107c10;

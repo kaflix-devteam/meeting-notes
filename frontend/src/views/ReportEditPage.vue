@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import RichEditor from '../components/RichEditor.vue'
+import TagInput from '../components/TagInput.vue'
 import CalendarPicker from '../components/CalendarPicker.vue'
 import FileUploader from '../components/FileUploader.vue'
 import ReportPreview from '../components/ReportPreview.vue'
 import PolishOverlay from '../components/PolishOverlay.vue'
 import { useAuthStore } from '../stores/authStore'
-import { getReport, updateReport, uploadAttachment, deleteReport, polishReport, mergeFinalReport, getPreviousWeekReport, getDepartments, getTeams } from '../api'
+import { getReport, updateReport, uploadAttachment, deleteReport, polishReport, mergeFinalReport, getPreviousWeekReport, getDepartments, getTeams, getReportTags, setReportTags } from '../api'
+import { hasPendingUploads, waitForUploads } from '../extensions/clipboardImagePaste'
 import type { Department, Team } from '../types'
 
 const route = useRoute()
@@ -15,6 +17,7 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const reportId = ref(0)
+const reportUserId = ref<number | null>(null)
 const content = ref('')
 const reportDate = ref('')
 const showPreview = ref(false)
@@ -37,6 +40,7 @@ const selectedDeptId = ref<number | null>(null)
 const selectedTeamId = ref<number | null>(null)
 const showDeptDropdown = ref(false)
 const showTeamDropdown = ref(false)
+const selectedTags = ref<any[]>([])
 
 const filteredTeams = computed(() => {
   if (!selectedDeptId.value) return allTeams.value
@@ -73,10 +77,11 @@ function closeDropdowns() {
 }
 
 async function fetchPreviousReport() {
-  if (!auth.user || !reportDate.value) return
+  const uid = reportUserId.value || auth.user?.id
+  if (!uid || !reportDate.value) return
   loadingPrevious.value = true
   try {
-    const res = await getPreviousWeekReport(auth.user.id, reportDate.value)
+    const res = await getPreviousWeekReport(uid, reportDate.value, selectedTeamId.value || undefined)
     previousReport.value = res.data
   } catch {
     previousReport.value = null
@@ -99,6 +104,7 @@ onMounted(async () => {
     ])
     content.value = reportRes.data.content_html
     reportDate.value = reportRes.data.report_date
+    reportUserId.value = reportRes.data.user_id
     departments.value = deptRes.data
     allTeams.value = teamRes.data
 
@@ -114,6 +120,11 @@ onMounted(async () => {
     }
 
     fetchPreviousReport()
+
+    // 보고서 태그 로드 (TagInput 초기화 후 실행되도록 nextTick 사용)
+    const tagRes = await getReportTags(reportId.value)
+    await nextTick()
+    selectedTags.value = tagRes.data
   } catch (e: any) {
     errorMsg.value = e.response?.data?.message || 'Failed to load report.'
   } finally {
@@ -174,6 +185,8 @@ async function handleMerge() {
   errorMsg.value = ''
 
   try {
+    if (hasPendingUploads()) await waitForUploads()
+
     // 보고서 저장 먼저
     await updateReport(reportId.value, {
       content_html: content.value,
@@ -208,6 +221,12 @@ async function handleSave() {
   successMsg.value = ''
 
   try {
+    if (hasPendingUploads()) {
+      successMsg.value = '이미지 업로드 완료 대기 중...'
+      await waitForUploads()
+      successMsg.value = ''
+    }
+
     await updateReport(reportId.value, {
       content_html: content.value,
       report_date: reportDate.value,
@@ -219,6 +238,9 @@ async function handleSave() {
         await uploadAttachment(reportId.value, file)
       }
     }
+
+    // 태그 저장
+    await setReportTags(reportId.value, selectedTags.value.map((t: any) => t.id))
 
     successMsg.value = '저장되었습니다.'
     setTimeout(() => { successMsg.value = '' }, 3000)
@@ -274,6 +296,7 @@ async function handleSave() {
           </div>
         </div>
 
+        <TagInput v-model="selectedTags" :department-id="selectedDeptId" :team-id="selectedTeamId" />
         <span class="report-edit__user">{{ auth.user?.display_name }}</span>
       </div>
 
@@ -282,24 +305,10 @@ async function handleSave() {
       </div>
 
       <div class="report-edit__diff">
-        <!-- 왼쪽: 현재 편집 영역 -->
-        <div class="diff-pane diff-pane--current">
-          <div class="diff-pane__header diff-pane__header--current">
-            Current — {{ reportDate }}
-          </div>
-          <div class="diff-pane__body">
-            <div class="report-edit__editor">
-              <RichEditor v-model="content" :editable="!polishing" />
-            </div>
-
-            <FileUploader ref="fileUploaderRef" :report-id="reportId" />
-          </div>
-        </div>
-
-        <!-- 오른쪽: 이전 주 리포트 -->
+        <!-- 왼쪽: 이전 주 리포트 -->
         <div class="diff-pane diff-pane--previous">
           <div class="diff-pane__header diff-pane__header--previous">
-            Previous — {{ previousReport?.report_date || '(없음)' }}
+            지난 주 — {{ previousReport?.report_date || '(없음)' }}
           </div>
           <div class="diff-pane__body">
             <div v-if="loadingPrevious" class="diff-pane__loading">Loading...</div>
@@ -307,6 +316,20 @@ async function handleSave() {
               이전 주 보고서가 없습니다.
             </div>
             <div v-else class="diff-pane__content" v-html="previousReport.content_html"></div>
+          </div>
+        </div>
+
+        <!-- 오른쪽: 현재 편집 영역 -->
+        <div class="diff-pane diff-pane--current">
+          <div class="diff-pane__header diff-pane__header--current">
+            금주 — {{ reportDate }}
+          </div>
+          <div class="diff-pane__body">
+            <div class="report-edit__editor">
+              <RichEditor v-model="content" :editable="!polishing" />
+            </div>
+
+            <FileUploader ref="fileUploaderRef" :report-id="reportId" />
           </div>
         </div>
       </div>

@@ -2,19 +2,21 @@
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import RichEditor from '../components/RichEditor.vue'
+import TagInput from '../components/TagInput.vue'
 import CalendarPicker from '../components/CalendarPicker.vue'
 import FileUploader from '../components/FileUploader.vue'
 import ReportPreview from '../components/ReportPreview.vue'
 import PolishOverlay from '../components/PolishOverlay.vue'
 import { useAuthStore } from '../stores/authStore'
-import { createReport, updateReport, uploadAttachment, polishReport, mergeFinalReport, getPreviousWeekReport, getDepartments, getTeams } from '../api'
+import { createReport, updateReport, uploadAttachment, polishReport, mergeFinalReport, getPreviousWeekReport, getDepartments, getTeams, checkDuplicateReport, setReportTags } from '../api'
+import { hasPendingUploads, waitForUploads } from '../extensions/clipboardImagePaste'
 import type { Department, Team } from '../types'
 
 const router = useRouter()
 const auth = useAuthStore()
 
 const content = ref('')
-const reportDate = ref(new Date().toISOString().slice(0, 10))
+const reportDate = ref('')
 const showPreview = ref(false)
 const saving = ref(false)
 const polishing = ref(false)
@@ -34,6 +36,7 @@ const selectedDeptId = ref<number | null>(auth.user?.department_id || null)
 const selectedTeamId = ref<number | null>(auth.user?.team_id || null)
 const showDeptDropdown = ref(false)
 const showTeamDropdown = ref(false)
+const selectedTags = ref<any[]>([])
 
 const filteredTeams = computed(() => {
   if (!selectedDeptId.value) return allTeams.value
@@ -70,6 +73,23 @@ function closeDropdowns() {
   showTeamDropdown.value = false
 }
 
+async function checkDuplicate() {
+  if (!auth.user || savedReportId.value) return
+  try {
+    const res = await checkDuplicateReport(
+      auth.user.id,
+      reportDate.value,
+      selectedTeamId.value || undefined,
+    )
+    if (res.data && res.data.id) {
+      const confirmed = confirm('이전 작성중이던 보고서가 있어 이동하겠습니다.')
+      if (confirmed) {
+        router.push(`/reports/${res.data.id}/edit`)
+      }
+    }
+  } catch { /* ignore */ }
+}
+
 onMounted(async () => {
   document.addEventListener('click', closeDropdowns)
   try {
@@ -87,7 +107,7 @@ async function fetchPreviousReport() {
   if (!auth.user) return
   loadingPrevious.value = true
   try {
-    const res = await getPreviousWeekReport(auth.user.id, reportDate.value)
+    const res = await getPreviousWeekReport(auth.user.id, reportDate.value, selectedTeamId.value || undefined)
     previousReport.value = res.data
   } catch {
     previousReport.value = null
@@ -96,8 +116,10 @@ async function fetchPreviousReport() {
   }
 }
 
-// 날짜 변경 시 이전 주 리포트 자동 조회
-watch(reportDate, () => { fetchPreviousReport() }, { immediate: true })
+// 날짜/팀/사업부 변경 시 이전 주 리포트 자동 조회 + 중복 체크
+watch(reportDate, () => { fetchPreviousReport(); checkDuplicate() }, { immediate: true })
+watch(selectedTeamId, () => { fetchPreviousReport(); checkDuplicate() })
+watch(selectedDeptId, () => { fetchPreviousReport() })
 
 async function handleMerge() {
   if (!content.value || content.value === '<p></p>') {
@@ -105,7 +127,7 @@ async function handleMerge() {
     return
   }
   if (!reportDate.value) {
-    errorMsg.value = '보고서 날짜가 필요합니다.'
+    alert('보고 날짜를 지정해 주세요')
     return
   }
 
@@ -113,6 +135,9 @@ async function handleMerge() {
   errorMsg.value = ''
 
   try {
+    // 이미지 업로드 완료 대기
+    if (hasPendingUploads()) await waitForUploads()
+
     // 보고서 저장 먼저
     if (savedReportId.value) {
       await updateReport(savedReportId.value, {
@@ -170,12 +195,23 @@ async function handleSave() {
     errorMsg.value = '보고서 내용을 작성해주세요.'
     return
   }
+  if (!reportDate.value) {
+    alert('보고 날짜를 지정해 주세요')
+    return
+  }
 
   saving.value = true
   errorMsg.value = ''
   successMsg.value = ''
 
   try {
+    // 이미지 업로드 완료 대기
+    if (hasPendingUploads()) {
+      successMsg.value = '이미지 업로드 완료 대기 중...'
+      await waitForUploads()
+      successMsg.value = ''
+    }
+
     if (savedReportId.value) {
       // 이미 저장된 보고서 → 수정
       await updateReport(savedReportId.value, {
@@ -198,6 +234,11 @@ async function handleSave() {
       for (const file of fileUploaderRef.value.files) {
         await uploadAttachment(savedReportId.value!, file)
       }
+    }
+
+    // 태그 저장
+    if (savedReportId.value && selectedTags.value.length > 0) {
+      await setReportTags(savedReportId.value, selectedTags.value.map(t => t.id))
     }
 
     successMsg.value = '저장되었습니다.'
@@ -251,6 +292,7 @@ async function handleSave() {
         </div>
       </div>
 
+      <TagInput v-model="selectedTags" :department-id="selectedDeptId" :team-id="selectedTeamId" />
       <span class="report-create__user">{{ auth.user?.display_name }}</span>
     </div>
 
@@ -259,24 +301,10 @@ async function handleSave() {
     </div>
 
     <div class="report-create__diff">
-      <!-- 왼쪽: 현재 작성 영역 -->
-      <div class="diff-pane diff-pane--current">
-        <div class="diff-pane__header diff-pane__header--current">
-          Current — {{ reportDate }}
-        </div>
-        <div class="diff-pane__body">
-          <div class="report-create__editor">
-            <RichEditor v-model="content" :editable="!polishing" />
-          </div>
-
-          <FileUploader ref="fileUploaderRef" />
-        </div>
-      </div>
-
-      <!-- 오른쪽: 이전 주 리포트 -->
+      <!-- 왼쪽: 이전 주 리포트 -->
       <div class="diff-pane diff-pane--previous">
         <div class="diff-pane__header diff-pane__header--previous">
-          Previous — {{ previousReport?.report_date || '(없음)' }}
+          지난 주 — {{ previousReport?.report_date || '(없음)' }}
         </div>
         <div class="diff-pane__body">
           <div v-if="loadingPrevious" class="diff-pane__loading">Loading...</div>
@@ -284,6 +312,20 @@ async function handleSave() {
             이전 주 보고서가 없습니다.
           </div>
           <div v-else class="diff-pane__content" v-html="previousReport.content_html"></div>
+        </div>
+      </div>
+
+      <!-- 오른쪽: 현재 작성 영역 -->
+      <div class="diff-pane diff-pane--current">
+        <div class="diff-pane__header diff-pane__header--current">
+          금주 — {{ reportDate }}
+        </div>
+        <div class="diff-pane__body">
+          <div class="report-create__editor">
+            <RichEditor v-model="content" :editable="!polishing" />
+          </div>
+
+          <FileUploader ref="fileUploaderRef" />
         </div>
       </div>
     </div>

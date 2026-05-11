@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { useAuthStore } from './stores/authStore'
+import NoticePopup from './components/NoticePopup.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -17,8 +18,9 @@ function handleLogout() {
       <h1 class="metro-title" @click="router.push('/my-reports')">보고또보고서</h1>
       <nav class="metro-nav">
         <router-link to="/meetings">최종 보고서</router-link>
-        <router-link to="/reports/new">새로 작성하기</router-link>
+        <router-link to="/notes">회의록</router-link>
         <router-link to="/my-reports">내 보고서</router-link>
+        <router-link to="/notices">공지</router-link>
         <router-link to="/admin/users">사용자</router-link>
         <router-link to="/admin/teams">팀</router-link>
       </nav>
@@ -30,6 +32,7 @@ function handleLogout() {
     <main class="metro-main">
       <router-view />
     </main>
+    <NoticePopup v-if="auth.isLoggedIn" :key="auth.user?.id" />
   </div>
 </template>
 
@@ -105,5 +108,10 @@ function handleLogout() {
   padding: 32px;
   max-width: 1200px;
   margin: 0 auto;
+}
+
+.metro-main:has(.meeting-detail) {
+  max-width: 100%;
+  padding: 24px;
 }
 </style>

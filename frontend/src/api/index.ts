@@ -40,8 +40,11 @@ export function getUsers() {
   return api.get<User[]>('/auth/users')
 }
 
-export function updateUserTeam(userId: number, teamId: number) {
-  return api.put<User>(`/auth/users/${userId}`, { team_id: teamId })
+export function updateUserTeam(userId: number, teamId?: number, displayName?: string) {
+  return api.put<User>(`/auth/users/${userId}`, {
+    ...(teamId ? { team_id: teamId } : {}),
+    ...(displayName ? { display_name: displayName } : {}),
+  })
 }
 
 export function deleteUser(userId: number) {
@@ -84,8 +87,14 @@ export function getReport(id: number) {
   return api.get<Report>(`/reports/${id}`)
 }
 
-export function getPreviousWeekReport(userId: number, reportDate: string) {
-  return api.get<Report | null>('/reports/previous', { params: { user_id: userId, report_date: reportDate } })
+export function getPreviousWeekReport(userId: number, reportDate: string, teamId?: number) {
+  return api.get<Report | null>('/reports/previous', { params: { user_id: userId, report_date: reportDate, ...(teamId ? { team_id: teamId } : {}) } })
+}
+
+export function checkDuplicateReport(userId: number, reportDate: string, teamId?: number) {
+  return api.get<{ id: number } | null>('/reports/check-duplicate', {
+    params: { user_id: userId, report_date: reportDate, ...(teamId ? { team_id: teamId } : {}) },
+  })
 }
 
 export function updateReport(id: number, data: UpdateReportPayload) {
@@ -135,16 +144,118 @@ export function getFinalReport(id: number) {
   return api.get<FinalReport>(`/final-reports/${id}`)
 }
 
-export function getPreviousFinalReport(reportDate: string, departmentId: number) {
-  return api.get<FinalReport | null>('/final-reports/previous', { params: { report_date: reportDate, department_id: departmentId } })
+export function getPreviousFinalReport(reportDate: string, departmentId: number, tagSignature?: string) {
+  return api.get<FinalReport | null>('/final-reports/previous', {
+    params: { report_date: reportDate, department_id: departmentId, tag_signature: tagSignature || '' }
+  })
 }
 
-export function analyzeWeeklyComparison(currentHtml: string, previousHtml: string, currentDate: string, previousDate: string) {
+export function generateShareLink(finalReportId: number) {
+  return api.post<{ share_url: string; share_token: string }>(`/final-reports/${finalReportId}/share`)
+}
+
+export function getSharedReport(token: string) {
+  return api.get<FinalReport>(`/final-reports/shared/${token}`)
+}
+
+export function sendShareEmail(finalReportId: number, recipients: string[]) {
+  return api.post<{ message: string; share_url: string }>(`/final-reports/${finalReportId}/send-email`, { recipients })
+}
+
+// Tags
+export function getTags(departmentId: number, teamId: number) {
+  return api.get<any[]>('/tags', { params: { department_id: departmentId, team_id: teamId } })
+}
+
+export function createTagApi(name: string, teamId: number, departmentId: number) {
+  return api.post<any>('/tags', { name, team_id: teamId, department_id: departmentId })
+}
+
+export function deleteTagApi(id: number) {
+  return api.delete(`/tags/${id}`)
+}
+
+export function getReportTags(reportId: number) {
+  return api.get<any[]>(`/tags/report/${reportId}`)
+}
+
+export function setReportTags(reportId: number, tagIds: number[]) {
+  return api.put(`/tags/report/${reportId}`, { tag_ids: tagIds })
+}
+
+// Meeting Notes (회의록)
+export function getMeetingNotesList() {
+  return api.get<any[]>('/meeting-notes')
+}
+
+export function getMeetingNoteById(id: number) {
+  return api.get<any>(`/meeting-notes/${id}`)
+}
+
+export function createMeetingNote(data: { report_date: string; department_id: number; team_id?: number; user_id: number; content_html: string; tag_signature?: string }) {
+  return api.post<{ id: number; message: string }>('/meeting-notes', data)
+}
+
+export function updateMeetingNote(id: number, data: { content_html: string; report_date: string; team_id?: number; department_id?: number; tag_signature?: string }) {
+  return api.put(`/meeting-notes/${id}`, data)
+}
+
+export function deleteMeetingNote(id: number) {
+  return api.delete(`/meeting-notes/${id}`)
+}
+
+export function generateNoteShareLink(noteId: number) {
+  return api.post<{ share_url: string; share_token: string }>(`/meeting-notes/${noteId}/share`)
+}
+
+export function getSharedMeetingNote(token: string) {
+  return api.get<any>(`/meeting-notes/shared/${token}`)
+}
+
+export function sendNoteShareEmail(noteId: number, recipients: string[]) {
+  return api.post<{ message: string; share_url: string }>(`/meeting-notes/${noteId}/send-email`, { recipients })
+}
+
+export function saveMeetingNotes(finalReportId: number, meetingNotes: string) {
+  return api.put(`/final-reports/${finalReportId}/meeting-notes`, { meeting_notes: meetingNotes })
+}
+
+// 공지
+export function getNotices(userId?: number) {
+  return api.get<any[]>('/notices', { params: userId ? { user_id: userId } : {} })
+}
+
+export function getUnreadNotices(userId: number) {
+  return api.get<any[]>('/notices/unread', { params: { user_id: userId } })
+}
+
+export function createNotice(data: { title: string; content: string }) {
+  return api.post<{ id: number; message: string }>('/notices', data)
+}
+
+export function updateNotice(id: number, data: { title: string; content: string }) {
+  return api.put(`/notices/${id}`, data)
+}
+
+export function deleteNotice(id: number) {
+  return api.delete(`/notices/${id}`)
+}
+
+export function markNoticeAsRead(id: number, userId: number) {
+  return api.post(`/notices/${id}/read`, { user_id: userId })
+}
+
+export function markAllNoticesAsRead(userId: number) {
+  return api.post('/notices/read-all', { user_id: userId })
+}
+
+export function analyzeWeeklyComparison(currentHtml: string, previousHtml: string, currentDate: string, previousDate: string, finalReportId?: number) {
   return api.post<{ analysis_html: string }>('/final-reports/analyze', {
     current_html: currentHtml,
     previous_html: previousHtml,
     current_date: currentDate,
     previous_date: previousDate,
+    final_report_id: finalReportId,
   })
 }
 

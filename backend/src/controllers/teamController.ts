@@ -179,10 +179,29 @@ export async function deleteTeam(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    // 삭제 전 사업부 ID 기록
+    const [teamRows] = await pool.query<RowDataPacket[]>(
+      'SELECT department_id FROM teams WHERE id = ?', [id]
+    );
+    const deptId = teamRows[0]?.department_id;
+
+    // 관련 보고서의 team_id NULL 처리 후 삭제
+    await pool.query('UPDATE reports SET team_id = NULL WHERE team_id = ?', [id]);
     const [result] = await pool.query<ResultSetHeader>('DELETE FROM teams WHERE id = ?', [id]);
     if (result.affectedRows === 0) {
       res.status(404).json({ error: '팀을 찾을 수 없습니다.' });
       return;
+    }
+
+    // 해당 사업부에 다른 팀이 없으면 사업부도 삭제
+    if (deptId) {
+      const [remaining] = await pool.query<RowDataPacket[]>(
+        'SELECT id FROM teams WHERE department_id = ? LIMIT 1', [deptId]
+      );
+      if (remaining.length === 0) {
+        await pool.query('DELETE FROM departments WHERE id = ?', [deptId]);
+        console.log(`[teamController] Orphan department ${deptId} deleted`);
+      }
     }
 
     res.json({ message: '팀이 삭제되었습니다.' });

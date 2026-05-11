@@ -12,6 +12,9 @@ import finalReportsRouter from './routes/finalReports';
 import attachmentsRouter from './routes/attachments';
 import imagesRouter from './routes/images';
 import authRouter from './routes/auth';
+import tagsRouter from './routes/tags';
+import meetingNotesRouter from './routes/meetingNotes';
+import noticesRouter from './routes/notices';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -34,6 +37,9 @@ app.use('/api/final-reports', finalReportsRouter);
 app.use('/api/attachments', attachmentsRouter);
 app.use('/api/images', imagesRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/tags', tagsRouter);
+app.use('/api/meeting-notes', meetingNotesRouter);
+app.use('/api/notices', noticesRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

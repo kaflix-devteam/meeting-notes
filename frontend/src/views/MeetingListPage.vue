@@ -1,17 +1,55 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useReportStore } from '../stores/reportStore'
+import { getDepartments, getTeams } from '../api'
+import type { Department, Team } from '../types'
 
 const store = useReportStore()
 const router = useRouter()
 
-onMounted(() => {
-  store.fetchFinalReports()
+const deptMap = ref<Map<number, Department>>(new Map())
+const teamMap = ref<Map<number, Team>>(new Map())
+
+const dayNames = ['일', '월', '화', '수', '목', '금', '토']
+
+function getDayName(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  return dayNames[d.getDay()] || ''
+}
+
+onMounted(async () => {
+  const [deptRes, teamRes] = await Promise.all([getDepartments(), getTeams()])
+  for (const d of deptRes.data) deptMap.value.set(d.id, d)
+  for (const t of teamRes.data) teamMap.value.set(t.id, t)
+  await store.fetchFinalReports()
 })
 
 function goToDetail(id: number) {
   router.push(`/meetings/${id}`)
+}
+
+function getDeptDisplay(report: any) {
+  if (report.department_id && deptMap.value.has(report.department_id)) {
+    const d = deptMap.value.get(report.department_id)!
+    return { name: d.name, color: (d as any).color || '#5c2d91' }
+  }
+  if (report.department_name) {
+    return { name: report.department_name, color: report.department_color || '#5c2d91' }
+  }
+  return null
+}
+
+function getTeamBadges(report: any): { name: string; color: string }[] {
+  const summary = report.team_summary
+  if (!summary) return []
+  return Object.entries(summary).map(([code, entry]: [string, any]) => {
+    const team = entry.teamId ? teamMap.value.get(entry.teamId) : null
+    return {
+      name: team?.name || code,
+      color: (team as any)?.color || '#0078D4',
+    }
+  })
 }
 </script>
 
@@ -29,18 +67,32 @@ function goToDetail(id: number) {
       <div
         v-for="report in store.finalReports"
         :key="report.id"
-        class="metro-card metro-card--clickable"
+        class="metro-card metro-card--clickable meeting-list__row"
         @click="goToDetail(report.id)"
       >
-        <div class="meeting-list__date">{{ report.report_date }}</div>
-        <div class="meeting-list__teams">
-          <span v-if="(report as any).department_name" class="metro-badge" :style="{ backgroundColor: (report as any).department_color || '#5c2d91' }">
-            {{ (report as any).department_name }}
-          </span>
-          <span v-if="(report as any).team_name" class="metro-badge" :style="{ backgroundColor: (report as any).team_color || '#107c10' }">
-            {{ (report as any).team_name }}
-          </span>
-        </div>
+        <span class="meeting-list__date">{{ report.report_date }} ({{ getDayName(report.report_date) }})</span>
+        <span
+          v-if="getDeptDisplay(report)"
+          class="metro-badge"
+          :style="{ backgroundColor: getDeptDisplay(report)!.color }"
+        >
+          {{ getDeptDisplay(report)!.name }}
+        </span>
+        <span
+          v-for="badge in ((report as any).team_badges || getTeamBadges(report))"
+          :key="badge.name"
+          class="metro-badge"
+          :style="{ backgroundColor: badge.color }"
+        >
+          {{ badge.name }}
+        </span>
+        <span
+          v-for="tag in ((report as any).tag_names || [])"
+          :key="tag"
+          class="metro-badge metro-badge--tag"
+        >
+          {{ tag }}
+        </span>
       </div>
     </div>
   </div>
@@ -50,18 +102,27 @@ function goToDetail(id: number) {
 .meeting-list__cards {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
+}
+
+.meeting-list__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  flex-wrap: wrap;
 }
 
 .meeting-list__date {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
-  margin-bottom: 8px;
+  white-space: nowrap;
 }
 
-.meeting-list__teams {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+.metro-badge--tag {
+  background: #0078D4 !important;
+  color: #fff !important;
+  font-size: 11px;
+  padding: 2px 6px;
 }
 </style>

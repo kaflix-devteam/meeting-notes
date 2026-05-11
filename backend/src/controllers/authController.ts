@@ -107,26 +107,36 @@ export async function getUsers(_req: Request, res: Response): Promise<void> {
 export async function updateUserTeam(req: Request, res: Response): Promise<void> {
   try {
     const userId = parseInt(req.params.id as string, 10);
-    const { team_id } = req.body;
+    const { team_id, display_name } = req.body;
 
-    if (isNaN(userId) || !team_id) {
-      res.status(400).json({ error: 'user id와 team_id가 필요합니다.' });
+    if (isNaN(userId)) {
+      res.status(400).json({ error: 'user id가 필요합니다.' });
       return;
     }
 
-    const [teams] = await pool.query<RowDataPacket[]>(
-      'SELECT id FROM teams WHERE id = ?',
-      [team_id]
-    );
-    if (teams.length === 0) {
-      res.status(400).json({ error: '존재하지 않는 팀입니다.' });
-      return;
+    // 팀 변경
+    if (team_id) {
+      const [teams] = await pool.query<RowDataPacket[]>(
+        'SELECT id FROM teams WHERE id = ?',
+        [team_id]
+      );
+      if (teams.length === 0) {
+        res.status(400).json({ error: '존재하지 않는 팀입니다.' });
+        return;
+      }
+      await pool.query<ResultSetHeader>(
+        'UPDATE users SET team_id = ? WHERE id = ?',
+        [team_id, userId]
+      );
     }
 
-    await pool.query<ResultSetHeader>(
-      'UPDATE users SET team_id = ? WHERE id = ?',
-      [team_id, userId]
-    );
+    // 이름 변경
+    if (display_name && display_name.trim()) {
+      await pool.query<ResultSetHeader>(
+        'UPDATE users SET display_name = ? WHERE id = ?',
+        [display_name.trim(), userId]
+      );
+    }
 
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT u.id, u.username, u.display_name, u.is_admin, u.team_id, t.name as team_name, d.id as department_id, d.name as department_name

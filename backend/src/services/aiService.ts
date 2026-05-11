@@ -252,23 +252,43 @@ export async function polishReport(contentHtml: string, previousContentHtml?: st
     let userPrompt: string;
 
     if (previousContentHtml) {
-      userPrompt = `다음 업무보고서 HTML을 다듬어주세요.
+      userPrompt = `다음 업무보고서 HTML을 다듬어주세요. 이전 보고서와 비교하여 변화를 반영해주세요.
 
-## 이전 주 보고서
+## 이전 보고서 (참고용)
 ${previousContentHtml}
 
 ## 현재 보고서 (다듬을 대상)
 ${contentHtml}
 
-## 추가 지시사항
-- 이전 주 보고서와 현재 보고서를 비교하여, 각 항목의 진행 상태를 파악해주세요.
-- 이전 주에 있던 항목이 현재에도 있으면 진행 상태(진행중, 완료, 보류 등)를 표시해주세요.
-- 이전 주에 없던 새로운 항목이면 [신규]로 표시해주세요.
-- 이전 주에 있었지만 현재 없는 항목은 [완료] 또는 [종료]로 추정 표시해주세요.
-- 진행 상태는 각 항목 앞에 대괄호로 표시합니다. 예: [진행중], [완료], [신규], [보류]
-- HTML 구조와 내용 다듬기는 기존 규칙대로 진행해주세요.`;
+## 비교 분석 지시사항
+1. 이전 보고서와 현재 보고서를 항목별로 비교하세요.
+2. 각 항목의 진행 상태를 파악하여 <span class="status-tag"> 태그로 표시하세요:
+   - <span class="status-tag status-progress">[진행중]</span> — 이전에도 있었고 현재도 계속 진행 중인 업무
+   - <span class="status-tag status-done">[완료]</span> — 이전에 진행 중이었고 현재 완료된 업무
+   - <span class="status-tag status-progress">[신규]</span> — 이전에 없었던 새로운 업무
+   - <span class="status-tag status-progress">[보류]</span> — 진행이 멈춘 업무
+3. 이전 보고서에 있었지만 현재 보고서에 언급이 없는 항목은 포함하지 마세요.
+4. 상태 태그는 각 항목의 맨 앞에 붙이세요. 예: <li><span class="status-tag status-progress">[신규]</span> 서버 마이그레이션 작업</li>
+5. HTML 구조 다듬기, 문체 정리, 하위 항목(ㄴ) 변환 등은 기존 규칙대로 진행하세요.
+6. 내용을 임의로 추가하지 마세요. 현재 보고서의 내용만 다듬으세요.`;
     } else {
-      userPrompt = `다음 업무보고서 HTML을 다듬어주세요.\n\n${contentHtml}`;
+      userPrompt = `다음 업무보고서 HTML을 다듬어주세요.
+
+## 현재 보고서 (다듬을 대상)
+${contentHtml}
+
+## 상태 태그 지시사항
+각 업무 항목의 맨 앞에 진행 상태를 <span class="status-tag"> 태그로 표시하세요:
+- <span class="status-tag status-progress">[진행중]</span> — 현재 진행 중인 업무
+- <span class="status-tag status-done">[완료]</span> — 완료된 업무
+- <span class="status-tag status-progress">[신규]</span> — 새로 시작한 업무
+- <span class="status-tag status-progress">[보류]</span> — 진행이 멈춘 업무
+- <span class="status-tag status-progress">[예정]</span> — 앞으로 진행할 예정인 업무
+
+보고서의 섹션 제목(예: 진행완료, 진행중, 진행예정, 장기목표 등)과 항목 내용을 보고 적절한 상태를 판단하세요.
+예: <li><span class="status-tag status-progress">[진행중]</span> 서버 마이그레이션 작업</li>
+
+HTML 구조 다듬기, 문체 정리, 하위 항목(ㄴ) 변환 등은 기존 규칙대로 진행하세요.`;
     }
 
     const message = await client.messages.create({
@@ -323,40 +343,33 @@ export async function standardizeForMerge(contentHtml: string, userName: string)
       messages: [
         {
           role: 'user',
-          content: `다음은 "${userName}"의 주간 업무보고서입니다. 아래 통일 양식에 맞게 HTML을 재구성해주세요.
+          content: `다음은 "${userName}"의 주간 업무보고서입니다. HTML 형식을 정리해주세요.
 
 ## 원본 보고서
 ${contentHtml}
 
-## 통일 양식 규칙
-반드시 아래 구조로만 출력하세요. 해당 섹션에 내용이 없으면 해당 섹션을 생략하세요.
+## 양식 규칙
+- 각 섹션은 <h4>섹션제목</h4> 다음에 <ul><li>...</li></ul> 구조를 사용하세요.
+- 원본에 있는 섹션 제목(예: 진행완료, 진행중, 진행예정, 장기목표, 이슈, 건의사항 등)을 **그대로 유지**하세요.
+- 원본에 섹션 구분이 없으면, 내용을 파악하여 적절한 섹션으로 분류하세요.
+- 섹션 제목을 임의로 변경하지 마세요. "장기목표"를 "차주 계획"으로 바꾸는 등의 변환을 하지 마세요.
 
-<h4>주요 업무</h4>
-<ul>
-  <li><strong>프로젝트/업무명</strong> — 내용 요약</li>
-</ul>
-
-<h4>진행 현황</h4>
-<ul>
-  <li><strong>프로젝트/업무명</strong> — 진행률 또는 상태</li>
-</ul>
-
-<h4>이슈 및 건의</h4>
-<ul>
-  <li>이슈 내용</li>
-</ul>
-
-<h4>차주 계획</h4>
-<ul>
-  <li>계획 내용</li>
-</ul>
+## 상태 태그 규칙
+각 업무 항목의 맨 앞에 진행 상태를 <span class="status-tag"> 태그로 표시하세요:
+- <span class="status-tag status-done">[완료]</span> — 완료된 업무
+- <span class="status-tag status-progress">[진행중]</span> — 현재 진행 중인 업무
+- <span class="status-tag status-progress">[신규]</span> — 새로 시작한 업무
+- <span class="status-tag status-progress">[보류]</span> — 진행이 멈춘 업무
+- <span class="status-tag status-progress">[예정]</span> — 앞으로 진행할 업무
+보고서의 섹션 제목과 항목 내용을 보고 적절한 상태를 판단하세요.
 
 ## 지시사항
-- 원본의 핵심 정보를 빠짐없이 포함하되, 위 양식 구조로 재배치하세요.
+- 원본의 핵심 정보를 빠짐없이 포함하세요.
 - 하위 항목이 있으면 중첩 <ul>로 표현하세요.
 - "ㄴ"으로 시작하는 항목은 상위 항목의 하위 내용입니다.
 - 내용을 임의로 추가하거나 삭제하지 마세요.
 - 간결하고 명확한 보고 문체를 사용하세요.
+- 원본에 포함된 <img> 태그는 반드시 그대로 보존하세요. src 속성을 절대 변경하지 마세요.
 - HTML만 응답하세요 (다른 텍스트 없이).`,
         },
       ],
@@ -428,14 +441,21 @@ HTML 형식으로만 응답하세요 (다른 텍스트 없이). 다음 구조를
     const responseText =
       message.content[0].type === 'text' ? message.content[0].text : '';
 
-    const trimmed = responseText.trim();
-    if (trimmed.startsWith('<')) {
-      return trimmed;
-    }
+    let trimmed = responseText.trim();
 
+    // ```html ... ``` 코드블록이 있으면 내부 HTML만 추출
     const codeBlockMatch = trimmed.match(/```(?:html)?\s*([\s\S]*?)```/);
     if (codeBlockMatch) {
-      return codeBlockMatch[1].trim();
+      trimmed = codeBlockMatch[1].trim();
+    }
+
+    // 남은 ``` 제거
+    trimmed = trimmed.replace(/```(?:html)?/g, '').replace(/```/g, '').trim();
+
+    // HTML 태그 시작 전 텍스트 제거
+    const htmlStart = trimmed.indexOf('<');
+    if (htmlStart > 0) {
+      trimmed = trimmed.substring(htmlStart);
     }
 
     return trimmed || '<p>분석 결과를 생성할 수 없습니다.</p>';

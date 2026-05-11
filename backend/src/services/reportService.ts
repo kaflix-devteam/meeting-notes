@@ -42,6 +42,25 @@ export async function createReport(
   return rows[0] as Report;
 }
 
+export async function findDuplicateReport(
+  userId: number,
+  reportDate: string,
+  teamId?: number
+): Promise<{ id: number } | null> {
+  let sql = `SELECT id FROM reports WHERE user_id = ? AND report_date = ?`;
+  const params: any[] = [userId, reportDate];
+
+  if (teamId) {
+    sql += ` AND team_id = ?`;
+    params.push(teamId);
+  }
+
+  sql += ` LIMIT 1`;
+
+  const [rows] = await pool.query<RowDataPacket[]>(sql, params);
+  return rows.length > 0 ? { id: rows[0].id } : null;
+}
+
 export async function getReportById(id: number): Promise<ReportWithTeam | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT r.id, r.user_id, r.team_id, r.department_id, DATE_FORMAT(r.report_date, '%Y-%m-%d') AS report_date,
@@ -139,14 +158,9 @@ export async function deleteReport(id: number): Promise<{ report_date: string } 
   return { report_date: reportDate };
 }
 
-export async function getPreviousWeekReport(userId: number, reportDate: string): Promise<ReportWithTeam | null> {
-  // reportDate에서 7일 전 날짜 계산
-  const date = new Date(reportDate);
-  date.setDate(date.getDate() - 7);
-  const prevDate = date.toISOString().slice(0, 10);
-
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT r.id, r.user_id, r.team_id, r.department_id, DATE_FORMAT(r.report_date, '%Y-%m-%d') AS report_date,
+export async function getPreviousWeekReport(userId: number, reportDate: string, teamId?: number): Promise<ReportWithTeam | null> {
+  // 현재 날짜보다 이전이면서 가장 가까운 보고서 조회
+  let sql = `SELECT r.id, r.user_id, r.team_id, r.department_id, DATE_FORMAT(r.report_date, '%Y-%m-%d') AS report_date,
             r.content_html, r.created_at, r.updated_at,
             t.code AS team_code, t.name AS team_name,
             d.name AS department_name, d.color AS department_color,
@@ -156,9 +170,20 @@ export async function getPreviousWeekReport(userId: number, reportDate: string):
      JOIN teams t ON r.team_id = t.id
      LEFT JOIN departments d ON r.department_id = d.id
      JOIN users u ON r.user_id = u.id
-     WHERE r.user_id = ? AND r.report_date = ?`,
-    [userId, prevDate]
-  );
+     WHERE r.report_date < ?`;
+  const params: any[] = [reportDate];
+
+  sql += ` AND r.user_id = ?`;
+  params.push(userId);
+
+  if (teamId) {
+    sql += ` AND r.team_id = ?`;
+    params.push(teamId);
+  }
+
+  sql += ` ORDER BY r.report_date DESC LIMIT 1`;
+
+  const [rows] = await pool.query<RowDataPacket[]>(sql, params);
   return (rows[0] as ReportWithTeam) || null;
 }
 

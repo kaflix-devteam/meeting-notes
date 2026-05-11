@@ -19,6 +19,7 @@ const editDeptId = ref<number>(0)
 const editTeamId = ref<number>(0)
 const editTeamsLoading = ref(false)
 const editTeams = ref<Team[]>([])
+const editDisplayName = ref('')
 const deletingUserId = ref<number | null>(null)
 
 onMounted(async () => {
@@ -38,6 +39,7 @@ onMounted(async () => {
 
 function startEdit(user: User) {
   editingUserId.value = user.id
+  editDisplayName.value = user.display_name || ''
   editDeptId.value = user.department_id || 0
   editTeamId.value = user.team_id
   // 소속에 해당하는 팀 목록 로드
@@ -48,6 +50,7 @@ function startEdit(user: User) {
 
 function cancelEdit() {
   editingUserId.value = null
+  editDisplayName.value = ''
   editDeptId.value = 0
   editTeamId.value = 0
   editTeams.value = []
@@ -82,7 +85,7 @@ async function saveEdit(user: User) {
   successMsg.value = ''
 
   try {
-    const res = await api.updateUserTeam(user.id, editTeamId.value)
+    const res = await api.updateUserTeam(user.id, editTeamId.value || undefined, editDisplayName.value || undefined)
     // 목록 갱신
     const idx = users.value.findIndex(u => u.id === user.id)
     if (idx >= 0) {
@@ -140,8 +143,12 @@ async function handleDeleteUser(user: User) {
           <tr v-for="user in users" :key="user.id">
             <td>{{ user.id }}</td>
             <td>{{ user.username }}</td>
-            <td>
+            <td v-if="!auth.isAdmin || editingUserId !== user.id">
               {{ user.display_name }}
+              <span v-if="user.is_admin" class="user-mgmt__admin-badge">ADMIN</span>
+            </td>
+            <td v-else>
+              <input v-model="editDisplayName" class="metro-input user-mgmt__name-input" placeholder="이름" />
               <span v-if="user.is_admin" class="user-mgmt__admin-badge">ADMIN</span>
             </td>
 
@@ -230,6 +237,12 @@ async function handleDeleteUser(user: User) {
 .user-mgmt__actions {
   display: flex;
   gap: 6px;
+}
+
+.user-mgmt__name-input {
+  width: 100px;
+  padding: 4px 8px;
+  font-size: 13px;
 }
 
 .user-mgmt__admin-badge {

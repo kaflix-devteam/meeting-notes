@@ -46,7 +46,10 @@ async function handleDelete(e: Event, id: number) {
 
 <template>
   <div class="my-reports">
-    <h2 class="metro-section__title">{{ auth.isAdmin ? 'All Reports' : 'My Reports' }}</h2>
+    <div class="my-reports__top">
+      <h2 class="metro-section__title">{{ auth.isAdmin ? 'All Reports' : 'My Reports' }}</h2>
+      <button class="metro-btn metro-btn--green" @click="$router.push('/reports/new')">새로 작성하기</button>
+    </div>
 
     <div v-if="store.loading" class="metro-loading">Loading...</div>
 
@@ -71,6 +74,13 @@ async function handleDelete(e: Event, id: number) {
           </span>
           <span v-if="(report as any).user_display_name" class="metro-badge metro-badge--blue">
             {{ (report as any).user_display_name }}
+          </span>
+          <span
+            v-for="tag in ((report as any).tags || [])"
+            :key="tag.id"
+            class="metro-badge metro-badge--tag"
+          >
+            {{ tag.name }}
           </span>
           <button
             v-if="auth.isAdmin"
@@ -112,9 +122,27 @@ async function handleDelete(e: Event, id: number) {
   line-height: 1.5;
 }
 
+.my-reports__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.my-reports__top .metro-section__title {
+  margin-bottom: 0;
+}
+
 .metro-btn--small {
   padding: 2px 10px;
   font-size: 12px;
   margin-left: auto;
+}
+
+.metro-badge--tag {
+  background: #0078D4 !important;
+  color: #fff !important;
+  font-size: 11px;
+  padding: 2px 6px;
 }
 </style>
