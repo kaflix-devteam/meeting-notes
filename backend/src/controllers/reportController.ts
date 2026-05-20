@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
-import { RowDataPacket } from 'mysql2';
 import * as reportService from '../services/reportService';
 import * as tagService from '../services/tagService';
 import { polishReport as polishReportAI } from '../services/aiService';
@@ -34,14 +33,11 @@ export async function createReport(req: Request, res: Response): Promise<void> {
 async function attachTagsToReports(reports: any[]): Promise<any[]> {
   if (reports.length === 0) return reports;
   const ids = reports.map(r => r.id);
-  const [tagRows] = await pool.query<RowDataPacket[]>(
-    `SELECT rtm.report_id, rt.id as tag_id, rt.name as tag_name
+  const { rows: tagRows } = await pool.query(`SELECT rtm.report_id, rt.id as tag_id, rt.name as tag_name
      FROM report_tag_map rtm
      JOIN report_tags rt ON rtm.tag_id = rt.id
-     WHERE rtm.report_id IN (?)
-     ORDER BY rt.name`,
-    [ids]
-  );
+     WHERE rtm.report_id = ANY($1::int[])
+     ORDER BY rt.name`, [ids]);
   const tagMap = new Map<number, { id: number; name: string }[]>();
   for (const row of tagRows) {
     const list = tagMap.get(row.report_id) || [];

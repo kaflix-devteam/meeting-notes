@@ -1,7 +1,5 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
-
 export async function signup(req: Request, res: Response): Promise<void> {
   try {
     const { username, password, display_name, team_id } = req.body;
@@ -11,31 +9,22 @@ export async function signup(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const [existing] = await pool.query<RowDataPacket[]>(
-      'SELECT id FROM users WHERE username = ?',
-      [username]
-    );
+    const { rows: existing } = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
     if (existing.length > 0) {
       res.status(409).json({ error: '이미 사용 중인 아이디입니다.' });
       return;
     }
 
-    const [teams] = await pool.query<RowDataPacket[]>(
-      'SELECT id FROM teams WHERE id = ?',
-      [team_id]
-    );
+    const { rows: teams } = await pool.query('SELECT id FROM teams WHERE id = $1', [team_id]);
     if (teams.length === 0) {
       res.status(400).json({ error: '존재하지 않는 팀입니다.' });
       return;
     }
 
-    const [result] = await pool.query<ResultSetHeader>(
-      'INSERT INTO users (username, password, display_name, team_id) VALUES (?, ?, ?, ?)',
-      [username, password, display_name, team_id]
-    );
+    const result = await pool.query('INSERT INTO users (username, password, display_name, team_id) VALUES ($1, $2, $3, $4) RETURNING id', [username, password, display_name, team_id]);
 
     res.status(201).json({
-      id: result.insertId,
+      id: result.rows[0].id,
       username,
       display_name,
       team_id,
@@ -55,14 +44,11 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT u.id, u.username, u.display_name, u.is_admin, u.team_id, t.name as team_name, t.color as team_color, d.id as department_id, d.name as department_name, d.color as department_color
+    const { rows } = await pool.query(`SELECT u.id, u.username, u.display_name, u.is_admin, u.team_id, t.name as team_name, t.color as team_color, d.id as department_id, d.name as department_name, d.color as department_color
        FROM users u
        JOIN teams t ON u.team_id = t.id
        JOIN departments d ON t.department_id = d.id
-       WHERE u.username = ? AND u.password = ?`,
-      [username, password]
-    );
+       WHERE u.username = $1 AND u.password = $2`, [username, password]);
 
     if (rows.length === 0) {
       res.status(401).json({ error: '아이디 또는 패스워드가 올바르지 않습니다.' });
@@ -90,13 +76,11 @@ export async function login(req: Request, res: Response): Promise<void> {
 
 export async function getUsers(_req: Request, res: Response): Promise<void> {
   try {
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT u.id, u.username, u.display_name, u.is_admin, u.team_id, t.name as team_name, d.id as department_id, d.name as department_name
+    const { rows } = await pool.query(`SELECT u.id, u.username, u.display_name, u.is_admin, u.team_id, t.name as team_name, d.id as department_id, d.name as department_name
        FROM users u
        JOIN teams t ON u.team_id = t.id
        JOIN departments d ON t.department_id = d.id
-       ORDER BY u.id`
-    );
+       ORDER BY u.id`);
     res.json(rows.map((r: any) => ({ ...r, is_admin: !!r.is_admin })));
   } catch (error) {
     console.error('[authController] getUsers error:', error);
@@ -116,36 +100,24 @@ export async function updateUserTeam(req: Request, res: Response): Promise<void>
 
     // 팀 변경
     if (team_id) {
-      const [teams] = await pool.query<RowDataPacket[]>(
-        'SELECT id FROM teams WHERE id = ?',
-        [team_id]
-      );
+      const { rows: teams } = await pool.query('SELECT id FROM teams WHERE id = $1', [team_id]);
       if (teams.length === 0) {
         res.status(400).json({ error: '존재하지 않는 팀입니다.' });
         return;
       }
-      await pool.query<ResultSetHeader>(
-        'UPDATE users SET team_id = ? WHERE id = ?',
-        [team_id, userId]
-      );
+      await pool.query('UPDATE users SET team_id = $1 WHERE id = $2', [team_id, userId]);
     }
 
     // 이름 변경
     if (display_name && display_name.trim()) {
-      await pool.query<ResultSetHeader>(
-        'UPDATE users SET display_name = ? WHERE id = ?',
-        [display_name.trim(), userId]
-      );
+      await pool.query('UPDATE users SET display_name = $1 WHERE id = $2', [display_name.trim(), userId]);
     }
 
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT u.id, u.username, u.display_name, u.is_admin, u.team_id, t.name as team_name, d.id as department_id, d.name as department_name
+    const { rows } = await pool.query(`SELECT u.id, u.username, u.display_name, u.is_admin, u.team_id, t.name as team_name, d.id as department_id, d.name as department_name
        FROM users u
        JOIN teams t ON u.team_id = t.id
        JOIN departments d ON t.department_id = d.id
-       WHERE u.id = ?`,
-      [userId]
-    );
+       WHERE u.id = $1`, [userId]);
 
     if (rows.length === 0) {
       res.status(404).json({ error: '유저를 찾을 수 없습니다.' });
@@ -168,10 +140,7 @@ export async function deleteUser(req: Request, res: Response): Promise<void> {
     }
 
     // admin 계정은 삭제 불가
-    const [users] = await pool.query<RowDataPacket[]>(
-      'SELECT is_admin FROM users WHERE id = ?',
-      [userId]
-    );
+    const { rows: users } = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
     if (users.length === 0) {
       res.status(404).json({ error: '유저를 찾을 수 없습니다.' });
       return;
@@ -182,8 +151,8 @@ export async function deleteUser(req: Request, res: Response): Promise<void> {
     }
 
     // 유저의 보고서도 함께 삭제
-    await pool.query('DELETE FROM reports WHERE user_id = ?', [userId]);
-    await pool.query<ResultSetHeader>('DELETE FROM users WHERE id = ?', [userId]);
+    await pool.query('DELETE FROM reports WHERE user_id = $1', [userId]);
+    await pool.query('DELETE FROM users WHERE id = $1', [userId]);
 
     res.json({ message: '유저가 삭제되었습니다.' });
   } catch (error) {

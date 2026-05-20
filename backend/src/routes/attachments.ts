@@ -2,8 +2,6 @@ import { Router } from 'express';
 import path from 'path';
 import { Request, Response } from 'express';
 import pool from '../config/database';
-import { RowDataPacket } from 'mysql2';
-
 const router = Router();
 
 // GET /api/attachments/:id/download - download attachment file
@@ -15,7 +13,7 @@ router.get('/:id/download', async (req: Request, res: Response) => {
       return;
     }
 
-    const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM attachments WHERE id = ?', [id]);
+    const { rows } = await pool.query('SELECT * FROM attachments WHERE id = $1', [id]);
     if (rows.length === 0) {
       res.status(404).json({ error: 'Attachment not found' });
       return;

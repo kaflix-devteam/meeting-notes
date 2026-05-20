@@ -1,6 +1,5 @@
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import pool from '../config/database';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import {
   analyzeReport,
   generateFinalReportHtml,
@@ -76,15 +75,12 @@ type MergeState = typeof MergeWorkflowState.State;
 async function collectReports(state: MergeState): Promise<Partial<MergeState>> {
   console.log(`[workflow] Collecting reports for date: ${state.reportDate}`);
 
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT r.id, r.user_id, r.team_id, r.report_date, r.content_html,
+  const { rows } = await pool.query(`SELECT r.id, r.user_id, r.team_id, r.report_date, r.content_html,
             t.code AS team_code, t.name AS team_name
      FROM reports r
      JOIN teams t ON r.team_id = t.id
-     WHERE r.report_date = ?
-     ORDER BY t.code, r.id`,
-    [state.reportDate]
-  );
+     WHERE r.report_date = $1
+     ORDER BY t.code, r.id`, [state.reportDate]);
 
   const reports: Report[] = rows.map((row) => ({
     id: row.id,
@@ -185,19 +181,13 @@ async function saveFinalReport(
     return { error: 'No merged HTML to save' };
   }
 
-  await pool.query<ResultSetHeader>(
-    `INSERT INTO final_reports (report_date, content_html, team_summary)
-     VALUES (?, ?, ?)
-     ON DUPLICATE KEY UPDATE
-       content_html = VALUES(content_html),
-       team_summary = VALUES(team_summary)`,
-    [state.reportDate, state.mergedHtml, JSON.stringify(state.teamSummary ?? {})]
-  );
+  await pool.query(`INSERT INTO final_reports (report_date, content_html, team_summary, tag_signature)
+     VALUES ($1, $2, $3, '')
+     ON CONFLICT (report_date, department_id, tag_signature) DO UPDATE SET
+       content_html = EXCLUDED.content_html,
+       team_summary = EXCLUDED.team_summary`, [state.reportDate, state.mergedHtml, JSON.stringify(state.teamSummary ?? {})]);
 
-  const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT id FROM final_reports WHERE report_date = ?',
-    [state.reportDate]
-  );
+  const { rows } = await pool.query('SELECT id FROM final_reports WHERE report_date = $1', [state.reportDate]);
 
   const finalReportId = rows[0]?.id;
   console.log(`[workflow] Final report saved with id: ${finalReportId}`);

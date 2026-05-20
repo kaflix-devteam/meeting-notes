@@ -1,21 +1,18 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { mergeReportsManual } from '../services/mergeService';
 import { compareWeeklyReports } from '../services/aiService';
 
 export async function getFinalReports(_req: Request, res: Response): Promise<void> {
   try {
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT f.id, DATE_FORMAT(f.report_date, '%Y-%m-%d') AS report_date,
+    const { rows } = await pool.query(`SELECT f.id, to_char(f.report_date, 'YYYY-MM-DD') AS report_date,
               f.department_id, f.team_id, f.team_summary, f.tag_signature, f.created_at, f.updated_at,
               d.name AS department_name, d.color AS department_color,
               t.name AS team_name, t.color AS team_color
        FROM final_reports f
        LEFT JOIN departments d ON f.department_id = d.id
        LEFT JOIN teams t ON f.team_id = t.id
-       ORDER BY f.report_date DESC, d.name, t.name`
-    );
+       ORDER BY f.report_date DESC, d.name, t.name`);
 
     // 팀 ID → 이름/색상 일괄 조회
     const allTeamIds = new Set<number>();
@@ -34,17 +31,13 @@ export async function getFinalReports(_req: Request, res: Response): Promise<voi
 
     const teamInfoMap = new Map<number, { name: string; color: string }>();
     if (allTeamIds.size > 0) {
-      const [teamRows] = await pool.query<RowDataPacket[]>(
-        'SELECT id, name, color FROM teams WHERE id IN (?)', [[...allTeamIds]]
-      );
+      const { rows: teamRows } = await pool.query('SELECT id, name, color FROM teams WHERE id = ANY($1::int[])', [[...allTeamIds]]);
       for (const tr of teamRows) teamInfoMap.set(tr.id, { name: tr.name, color: tr.color });
     }
 
     const tagNameMap = new Map<number, string>();
     if (allTagIds.size > 0) {
-      const [tagRows] = await pool.query<RowDataPacket[]>(
-        'SELECT id, name FROM report_tags WHERE id IN (?)', [[...allTagIds]]
-      );
+      const { rows: tagRows } = await pool.query('SELECT id, name FROM report_tags WHERE id = ANY($1::int[])', [[...allTagIds]]);
       for (const tr of tagRows) tagNameMap.set(tr.id, tr.name);
     }
 
@@ -91,17 +84,14 @@ export async function getFinalReportById(req: Request, res: Response): Promise<v
       return;
     }
 
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT f.id, DATE_FORMAT(f.report_date, '%Y-%m-%d') AS report_date, f.content_html, f.team_summary, f.analysis_html, f.meeting_notes,
+    const { rows } = await pool.query(`SELECT f.id, to_char(f.report_date, 'YYYY-MM-DD') AS report_date, f.content_html, f.team_summary, f.analysis_html, f.meeting_notes,
               f.department_id, f.team_id, f.tag_signature, f.created_at, f.updated_at,
               d.name AS department_name, d.color AS department_color,
               t.name AS team_name, t.color AS team_color
        FROM final_reports f
        LEFT JOIN departments d ON f.department_id = d.id
        LEFT JOIN teams t ON f.team_id = t.id
-       WHERE f.id = ?`,
-      [id]
-    );
+       WHERE f.id = $1`, [id]);
 
     if (rows.length === 0) {
       res.status(404).json({ error: 'Final report not found' });
@@ -130,12 +120,9 @@ export async function deleteFinalReport(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const [result] = await pool.query<ResultSetHeader>(
-      'DELETE FROM final_reports WHERE id = ?',
-      [id]
-    );
+    const result = await pool.query('DELETE FROM final_reports WHERE id = $1', [id]);
 
-    if (result.affectedRows === 0) {
+    if (result.rowCount === 0) {
       res.status(404).json({ error: 'Final report not found' });
       return;
     }
@@ -158,19 +145,16 @@ export async function getPreviousFinalReport(req: Request, res: Response): Promi
       return;
     }
 
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT f.id, DATE_FORMAT(f.report_date, '%Y-%m-%d') AS report_date, f.content_html, f.team_summary, f.analysis_html, f.meeting_notes,
+    const { rows } = await pool.query(`SELECT f.id, to_char(f.report_date, 'YYYY-MM-DD') AS report_date, f.content_html, f.team_summary, f.analysis_html, f.meeting_notes,
               f.department_id, f.team_id, f.tag_signature, f.created_at, f.updated_at,
               d.name AS department_name, d.color AS department_color,
               t.name AS team_name, t.color AS team_color
        FROM final_reports f
        LEFT JOIN departments d ON f.department_id = d.id
        LEFT JOIN teams t ON f.team_id = t.id
-       WHERE f.report_date < ? AND f.department_id = ? AND f.tag_signature = ?
+       WHERE f.report_date < $1 AND f.department_id = $2 AND f.tag_signature = $3
        ORDER BY f.report_date DESC
-       LIMIT 1`,
-      [reportDate, departmentId, tagSignature]
-    );
+       LIMIT 1`, [reportDate, departmentId, tagSignature]);
 
     if (rows.length === 0) {
       res.json(null);
@@ -205,9 +189,7 @@ export async function createMeetingNote(req: Request, res: Response): Promise<vo
     // team_summary 구성
     let teamSummary = '{}';
     if (team_id) {
-      const [teamRows] = await pool.query<RowDataPacket[]>(
-        'SELECT id, code FROM teams WHERE id = ?', [team_id]
-      );
+      const { rows: teamRows } = await pool.query('SELECT id, code FROM teams WHERE id = $1', [team_id]);
       if (teamRows.length > 0) {
         const t = teamRows[0];
         teamSummary = JSON.stringify({
@@ -217,26 +199,17 @@ export async function createMeetingNote(req: Request, res: Response): Promise<vo
     }
 
     // 기존 final_report가 있으면 meeting_notes만 업데이트, 없으면 새로 생성
-    const [existing] = await pool.query<RowDataPacket[]>(
-      `SELECT id FROM final_reports WHERE report_date = ? AND department_id = ? AND tag_signature = ?`,
-      [report_date, department_id, tagSig]
-    );
+    const { rows: existing } = await pool.query(`SELECT id FROM final_reports WHERE report_date = $1 AND department_id = $2 AND tag_signature = $3`, [report_date, department_id, tagSig]);
 
     let finalReportId: number;
 
     if (existing.length > 0) {
       finalReportId = existing[0].id;
-      await pool.query<ResultSetHeader>(
-        'UPDATE final_reports SET meeting_notes = ?, team_summary = ? WHERE id = ?',
-        [meeting_notes || null, teamSummary, finalReportId]
-      );
+      await pool.query('UPDATE final_reports SET meeting_notes = $1, team_summary = $2 WHERE id = $3', [meeting_notes || null, teamSummary, finalReportId]);
     } else {
-      const [result] = await pool.query<ResultSetHeader>(
-        `INSERT INTO final_reports (report_date, department_id, content_html, team_summary, meeting_notes, tag_signature)
-         VALUES (?, ?, '', ?, ?, ?)`,
-        [report_date, department_id, teamSummary, meeting_notes || null, tagSig]
-      );
-      finalReportId = result.insertId;
+      const result = await pool.query(`INSERT INTO final_reports (report_date, department_id, content_html, team_summary, meeting_notes, tag_signature)
+         VALUES ($1, $2, '', $3, $4, $5) RETURNING id`, [report_date, department_id, teamSummary, meeting_notes || null, tagSig]);
+      finalReportId = result.rows[0].id;
     }
 
     res.status(201).json({ id: finalReportId, message: '회의록이 저장되었습니다.' });
@@ -256,10 +229,7 @@ export async function saveMeetingNotes(req: Request, res: Response): Promise<voi
 
     const { meeting_notes } = req.body;
 
-    await pool.query<ResultSetHeader>(
-      'UPDATE final_reports SET meeting_notes = ? WHERE id = ?',
-      [meeting_notes || null, id]
-    );
+    await pool.query('UPDATE final_reports SET meeting_notes = $1 WHERE id = $2', [meeting_notes || null, id]);
 
     res.json({ message: '회의록이 저장되었습니다.' });
   } catch (error) {
@@ -286,10 +256,7 @@ export async function analyzeWeeklyComparison(req: Request, res: Response): Prom
 
     // DB에 분석 결과 저장
     if (final_report_id) {
-      await pool.query(
-        'UPDATE final_reports SET analysis_html = ? WHERE id = ?',
-        [analysisHtml, final_report_id]
-      );
+      await pool.query('UPDATE final_reports SET analysis_html = $1 WHERE id = $2', [analysisHtml, final_report_id]);
     }
 
     res.json({ analysis_html: analysisHtml });
@@ -316,13 +283,10 @@ export async function mergeFinalReport(req: Request, res: Response): Promise<voi
       }
       res.json({ message: `최종보고서에 병합되었습니다. (${count}건)` });
     } else {
-      const [deptRows] = await pool.query<RowDataPacket[]>(
-        `SELECT DISTINCT t.department_id
+      const { rows: deptRows } = await pool.query(`SELECT DISTINCT t.department_id
          FROM reports r
          JOIN teams t ON r.team_id = t.id
-         WHERE r.report_date = ? AND t.department_id IS NOT NULL`,
-        [report_date]
-      );
+         WHERE r.report_date = $1 AND t.department_id IS NOT NULL`, [report_date]);
 
       if (deptRows.length === 0) {
         res.status(404).json({ error: '해당 날짜에 병합할 보고서가 없습니다.' });

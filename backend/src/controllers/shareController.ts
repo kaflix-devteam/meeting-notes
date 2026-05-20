@@ -2,8 +2,6 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import pool from '../config/database';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
-
 // 공유 토큰 생성
 export async function generateShareLink(req: Request, res: Response): Promise<void> {
   try {
@@ -14,9 +12,7 @@ export async function generateShareLink(req: Request, res: Response): Promise<vo
     }
 
     // 이미 토큰이 있으면 재사용
-    const [existing] = await pool.query<RowDataPacket[]>(
-      'SELECT share_token FROM final_reports WHERE id = ?', [id]
-    );
+    const { rows: existing } = await pool.query('SELECT share_token FROM final_reports WHERE id = $1', [id]);
     if (existing.length === 0) {
       res.status(404).json({ error: 'Final report not found' });
       return;
@@ -25,10 +21,7 @@ export async function generateShareLink(req: Request, res: Response): Promise<vo
     let token = existing[0].share_token;
     if (!token) {
       token = crypto.randomBytes(32).toString('hex');
-      await pool.query<ResultSetHeader>(
-        'UPDATE final_reports SET share_token = ? WHERE id = ?',
-        [token, id]
-      );
+      await pool.query('UPDATE final_reports SET share_token = $1 WHERE id = $2', [token, id]);
     }
 
     // 기존 최종보고서 상세 페이지에 토큰 파라미터 추가
@@ -51,17 +44,14 @@ export async function getSharedReport(req: Request, res: Response): Promise<void
       return;
     }
 
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT f.id, DATE_FORMAT(f.report_date, '%Y-%m-%d') AS report_date, f.content_html, f.team_summary, f.analysis_html, f.meeting_notes,
+    const { rows } = await pool.query(`SELECT f.id, to_char(f.report_date, 'YYYY-MM-DD') AS report_date, f.content_html, f.team_summary, f.analysis_html, f.meeting_notes,
               f.department_id, f.team_id, f.created_at, f.updated_at,
               d.name AS department_name, d.color AS department_color,
               t.name AS team_name, t.color AS team_color
        FROM final_reports f
        LEFT JOIN departments d ON f.department_id = d.id
        LEFT JOIN teams t ON f.team_id = t.id
-       WHERE f.share_token = ?`,
-      [token]
-    );
+       WHERE f.share_token = $1`, [token]);
 
     if (rows.length === 0) {
       res.status(404).json({ error: '공유된 보고서를 찾을 수 없습니다.' });
@@ -99,10 +89,7 @@ export async function sendShareEmail(req: Request, res: Response): Promise<void>
     }
 
     // 보고서 조회 + 공유 토큰 확보
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, DATE_FORMAT(report_date, '%Y-%m-%d') AS report_date, share_token FROM final_reports WHERE id = ?`,
-      [id]
-    );
+    const { rows } = await pool.query(`SELECT id, to_char(report_date, 'YYYY-MM-DD') AS report_date, share_token FROM final_reports WHERE id = $1`, [id]);
     if (rows.length === 0) {
       res.status(404).json({ error: 'Final report not found' });
       return;
@@ -111,10 +98,7 @@ export async function sendShareEmail(req: Request, res: Response): Promise<void>
     let token = rows[0].share_token;
     if (!token) {
       token = crypto.randomBytes(32).toString('hex');
-      await pool.query<ResultSetHeader>(
-        'UPDATE final_reports SET share_token = ? WHERE id = ?',
-        [token, id]
-      );
+      await pool.query('UPDATE final_reports SET share_token = $1 WHERE id = $2', [token, id]);
     }
 
     const reportDate = rows[0].report_date;

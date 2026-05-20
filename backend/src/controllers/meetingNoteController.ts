@@ -2,12 +2,9 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import pool from '../config/database';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
-
 export async function getMeetingNotes(_req: Request, res: Response): Promise<void> {
   try {
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT m.id, DATE_FORMAT(m.report_date, '%Y-%m-%d') AS report_date,
+    const { rows } = await pool.query(`SELECT m.id, to_char(m.report_date, 'YYYY-MM-DD') AS report_date,
               m.user_id, m.team_id, m.department_id, m.content_html, m.tag_signature,
               m.created_at, m.updated_at,
               d.name AS department_name, d.color AS department_color,
@@ -17,8 +14,7 @@ export async function getMeetingNotes(_req: Request, res: Response): Promise<voi
        LEFT JOIN departments d ON m.department_id = d.id
        LEFT JOIN teams t ON m.team_id = t.id
        LEFT JOIN users u ON m.user_id = u.id
-       ORDER BY m.report_date DESC, m.created_at DESC`
-    );
+       ORDER BY m.report_date DESC, m.created_at DESC`);
 
     // 태그 이름 일괄 조회
     const allTagIds = new Set<number>();
@@ -29,9 +25,7 @@ export async function getMeetingNotes(_req: Request, res: Response): Promise<voi
     }
     const tagNameMap = new Map<number, string>();
     if (allTagIds.size > 0) {
-      const [tagRows] = await pool.query<RowDataPacket[]>(
-        'SELECT id, name FROM report_tags WHERE id IN (?)', [[...allTagIds]]
-      );
+      const { rows: tagRows } = await pool.query('SELECT id, name FROM report_tags WHERE id = ANY($1::int[])', [[...allTagIds]]);
       for (const tr of tagRows) tagNameMap.set(tr.id, tr.name);
     }
 
@@ -54,8 +48,7 @@ export async function getMeetingNoteById(req: Request, res: Response): Promise<v
     const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
 
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT m.id, DATE_FORMAT(m.report_date, '%Y-%m-%d') AS report_date,
+    const { rows } = await pool.query(`SELECT m.id, to_char(m.report_date, 'YYYY-MM-DD') AS report_date,
               m.user_id, m.team_id, m.department_id, m.content_html, m.tag_signature,
               m.created_at, m.updated_at,
               d.name AS department_name, d.color AS department_color,
@@ -65,9 +58,7 @@ export async function getMeetingNoteById(req: Request, res: Response): Promise<v
        LEFT JOIN departments d ON m.department_id = d.id
        LEFT JOIN teams t ON m.team_id = t.id
        LEFT JOIN users u ON m.user_id = u.id
-       WHERE m.id = ?`,
-      [id]
-    );
+       WHERE m.id = $1`, [id]);
 
     if (rows.length === 0) { res.status(404).json({ error: 'Meeting note not found' }); return; }
     res.json(rows[0]);
@@ -86,13 +77,10 @@ export async function createMeetingNote(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const [result] = await pool.query<ResultSetHeader>(
-      `INSERT INTO meeting_notes (user_id, team_id, department_id, report_date, content_html, tag_signature)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [user_id, team_id || null, department_id, report_date, content_html, tag_signature || '']
-    );
+    const result = await pool.query(`INSERT INTO meeting_notes (user_id, team_id, department_id, report_date, content_html, tag_signature)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, [user_id, team_id || null, department_id, report_date, content_html, tag_signature || '']);
 
-    res.status(201).json({ id: result.insertId, message: '회의록이 저장되었습니다.' });
+    res.status(201).json({ id: result.rows[0].id, message: '회의록이 저장되었습니다.' });
   } catch (error) {
     console.error('[meetingNoteController] createMeetingNote error:', error);
     res.status(500).json({ error: '회의록 저장에 실패했습니다.' });
@@ -111,10 +99,7 @@ export async function updateMeetingNote(req: Request, res: Response): Promise<vo
       return;
     }
 
-    await pool.query<ResultSetHeader>(
-      `UPDATE meeting_notes SET content_html = ?, report_date = ?, team_id = ?, department_id = ?, tag_signature = ? WHERE id = ?`,
-      [content_html, report_date, team_id || null, department_id, tag_signature || '', id]
-    );
+    await pool.query(`UPDATE meeting_notes SET content_html = $1, report_date = $2, team_id = $3, department_id = $4, tag_signature = $5 WHERE id = $6`, [content_html, report_date, team_id || null, department_id, tag_signature || '', id]);
 
     res.json({ message: '회의록이 수정되었습니다.' });
   } catch (error) {
@@ -128,8 +113,8 @@ export async function deleteMeetingNote(req: Request, res: Response): Promise<vo
     const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
 
-    const [result] = await pool.query<ResultSetHeader>('DELETE FROM meeting_notes WHERE id = ?', [id]);
-    if (result.affectedRows === 0) { res.status(404).json({ error: 'Meeting note not found' }); return; }
+    const result = await pool.query('DELETE FROM meeting_notes WHERE id = $1', [id]);
+    if (result.rowCount === 0) { res.status(404).json({ error: 'Meeting note not found' }); return; }
 
     res.json({ message: '회의록이 삭제되었습니다.' });
   } catch (error) {
@@ -143,17 +128,13 @@ export async function generateNoteShareLink(req: Request, res: Response): Promis
     const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) { res.status(400).json({ error: 'Invalid ID' }); return; }
 
-    const [existing] = await pool.query<RowDataPacket[]>(
-      'SELECT share_token FROM meeting_notes WHERE id = ?', [id]
-    );
+    const { rows: existing } = await pool.query('SELECT share_token FROM meeting_notes WHERE id = $1', [id]);
     if (existing.length === 0) { res.status(404).json({ error: 'Meeting note not found' }); return; }
 
     let token = existing[0].share_token;
     if (!token) {
       token = crypto.randomBytes(32).toString('hex');
-      await pool.query<ResultSetHeader>(
-        'UPDATE meeting_notes SET share_token = ? WHERE id = ?', [token, id]
-      );
+      await pool.query('UPDATE meeting_notes SET share_token = $1 WHERE id = $2', [token, id]);
     }
 
     const basePath = process.env.BASE_PATH || '';
@@ -170,8 +151,7 @@ export async function getSharedMeetingNote(req: Request, res: Response): Promise
     const token = req.params.token;
     if (!token) { res.status(400).json({ error: 'Token is required' }); return; }
 
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT m.id, DATE_FORMAT(m.report_date, '%Y-%m-%d') AS report_date,
+    const { rows } = await pool.query(`SELECT m.id, to_char(m.report_date, 'YYYY-MM-DD') AS report_date,
               m.user_id, m.team_id, m.department_id, m.content_html, m.tag_signature,
               m.created_at, m.updated_at,
               d.name AS department_name, d.color AS department_color,
@@ -181,9 +161,7 @@ export async function getSharedMeetingNote(req: Request, res: Response): Promise
        LEFT JOIN departments d ON m.department_id = d.id
        LEFT JOIN teams t ON m.team_id = t.id
        LEFT JOIN users u ON m.user_id = u.id
-       WHERE m.share_token = ?`,
-      [token]
-    );
+       WHERE m.share_token = $1`, [token]);
 
     if (rows.length === 0) { res.status(404).json({ error: '공유된 회의록을 찾을 수 없습니다.' }); return; }
     res.json(rows[0]);
@@ -204,17 +182,13 @@ export async function sendNoteShareEmail(req: Request, res: Response): Promise<v
       return;
     }
 
-    const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, DATE_FORMAT(report_date, '%Y-%m-%d') AS report_date, share_token FROM meeting_notes WHERE id = ?`, [id]
-    );
+    const { rows } = await pool.query(`SELECT id, to_char(report_date, 'YYYY-MM-DD') AS report_date, share_token FROM meeting_notes WHERE id = $1`, [id]);
     if (rows.length === 0) { res.status(404).json({ error: 'Meeting note not found' }); return; }
 
     let token = rows[0].share_token;
     if (!token) {
       token = crypto.randomBytes(32).toString('hex');
-      await pool.query<ResultSetHeader>(
-        'UPDATE meeting_notes SET share_token = ? WHERE id = ?', [token, id]
-      );
+      await pool.query('UPDATE meeting_notes SET share_token = $1 WHERE id = $2', [token, id]);
     }
 
     const reportDate = rows[0].report_date;

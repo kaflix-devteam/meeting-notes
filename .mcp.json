@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "agent-meeting-mcp": {
+      "type": "stdio",
+      "command": "jbang",
+      "args": [
+        "jdbc@quarkiverse/quarkus-mcp-servers",
+        "--user=pgadmin",
+        "--password=dlgorkdksrksek",
+        "jdbc:postgresql://172.10.65.80:30432/meeting_notes"
+      ],
+      "env": {}
+    }
+  }
+}

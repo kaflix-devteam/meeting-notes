@@ -1,5 +1,4 @@
 import pool from '../config/database';
-import { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { ReportWithTeam } from '../models/types';
 import { embedReport } from './ragService';
 import { standardizeForMerge } from './aiService';
@@ -15,18 +14,15 @@ export async function mergeReportsManual(
   departmentId: number
 ): Promise<number> {
   // 1. 해당 날짜 + 소속의 모든 보고서 수집
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT r.*, t.code AS team_code, t.name AS team_name,
+  const { rows } = await pool.query(`SELECT r.*, t.code AS team_code, t.name AS team_name,
             d.name AS department_name,
             u.display_name AS user_display_name
      FROM reports r
      JOIN teams t ON r.team_id = t.id
      JOIN departments d ON t.department_id = d.id
      JOIN users u ON r.user_id = u.id
-     WHERE r.report_date = ? AND t.department_id = ?
-     ORDER BY t.name, u.display_name, r.created_at`,
-    [reportDate, departmentId]
-  );
+     WHERE r.report_date = $1 AND t.department_id = $2
+     ORDER BY t.name, u.display_name, r.created_at`, [reportDate, departmentId]);
   const reports = rows as ReportWithTeam[];
 
   if (reports.length === 0) {
@@ -65,7 +61,7 @@ export async function mergeReportsManual(
     for (const tidStr of sig.split(',')) {
       const tid = parseInt(tidStr, 10);
       if (!tagNameMap.has(tid)) {
-        const [tagRows] = await pool.query<RowDataPacket[]>('SELECT name FROM report_tags WHERE id = ?', [tid]);
+        const { rows: tagRows } = await pool.query('SELECT name FROM report_tags WHERE id = $1', [tid]);
         if (tagRows.length > 0) tagNameMap.set(tid, tagRows[0].name);
       }
     }
@@ -148,14 +144,11 @@ export async function mergeReportsManual(
     }
 
     // UPSERT (날짜+소속+태그시그니처 기준)
-    await pool.query<ResultSetHeader>(
-      `INSERT INTO final_reports (report_date, department_id, team_id, content_html, team_summary, tag_signature)
-       VALUES (?, ?, NULL, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         content_html = VALUES(content_html),
-         team_summary = VALUES(team_summary)`,
-      [reportDate, departmentId, mergedHtml, JSON.stringify(teamSummary), sig]
-    );
+    await pool.query(`INSERT INTO final_reports (report_date, department_id, team_id, content_html, team_summary, tag_signature)
+       VALUES ($1, $2, NULL, $3, $4, $5)
+       ON CONFLICT (report_date, department_id, tag_signature) DO UPDATE SET
+         content_html = EXCLUDED.content_html,
+         team_summary = EXCLUDED.team_summary`, [reportDate, departmentId, mergedHtml, JSON.stringify(teamSummary), sig]);
 
     console.log(
       `[mergeService] Final report for ${reportDate} dept=${departmentId} tag="${sig}" merged with ${teamCount} team(s), ${totalMembers} report(s)`

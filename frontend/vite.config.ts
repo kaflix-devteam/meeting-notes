@@ -12,6 +12,16 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      '/meeting/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/meeting/, ''),
+      },
+      '/meeting/uploads': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/meeting/, ''),
+      },
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,

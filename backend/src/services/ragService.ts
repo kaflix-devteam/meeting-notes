@@ -3,8 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as cheerio from 'cheerio';
 import pool from '../config/database';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
-
 const client = new Anthropic({
   apiKey: process.env.CLAUDE_API_KEY,
 });
@@ -118,18 +116,15 @@ export async function embedReport(
     return;
   }
 
-  const [reportRows] = await pool.query<RowDataPacket[]>(
-    `SELECT r.report_date, t.code AS team_code, t.name AS team_name
+  const { rows: reportRows } = await pool.query(`SELECT r.report_date, t.code AS team_code, t.name AS team_name
      FROM reports r
      JOIN teams t ON r.team_id = t.id
-     WHERE r.id = ?`,
-    [reportId]
-  );
+     WHERE r.id = $1`, [reportId]);
 
   const reportMeta = reportRows[0];
 
   // Delete existing embeddings for this report
-  await pool.query('DELETE FROM document_embeddings WHERE report_id = ?', [reportId]);
+  await pool.query('DELETE FROM document_embeddings WHERE report_id = $1', [reportId]);
 
   const chunks = splitTextIntoChunks(plainText);
 
@@ -145,11 +140,8 @@ export async function embedReport(
       reportDate: reportMeta?.report_date ?? null,
     };
 
-    await pool.query<ResultSetHeader>(
-      `INSERT INTO document_embeddings (report_id, chunk_text, embedding, metadata)
-       VALUES (?, ?, ?, ?)`,
-      [reportId, chunk, JSON.stringify(embedding), JSON.stringify(metadata)]
-    );
+    await pool.query(`INSERT INTO document_embeddings (report_id, chunk_text, embedding, metadata)
+       VALUES ($1, $2, $3, $4)`, [reportId, chunk, JSON.stringify(embedding), JSON.stringify(metadata)]);
   }
 
   console.log(
@@ -167,13 +159,10 @@ export async function searchSimilarDocuments(
 ): Promise<SearchResult[]> {
   // MySQL doesn't support native vector similarity search.
   // Fallback: return recent embeddings matching by keyword overlap.
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT report_id, chunk_text, metadata
+  const { rows } = await pool.query(`SELECT report_id, chunk_text, metadata
      FROM document_embeddings
      ORDER BY created_at DESC
-     LIMIT ?`,
-    [limit]
-  );
+     LIMIT $1`, [limit]);
 
   return rows.map((row) => ({
     reportId: row.report_id,
