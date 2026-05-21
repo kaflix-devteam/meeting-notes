@@ -2,9 +2,11 @@
 
 set -e
 
-IMAGE_NAME="agent-meeting"
+IMAGE_NAME="meeting-notes"
 CLUSTER_NAME="dev-cluster"
 VERSION=$(date +%Y%m%d%H%M%S)
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+K8S_FILE="$SCRIPT_DIR/k8s/meeting-notes.yaml"
 
 echo "=== Agent Meeting K8s Build Script ==="
 
@@ -26,7 +28,7 @@ if kubectl get deployment/$IMAGE_NAME >/dev/null 2>&1; then
     kubectl set image deployment/$IMAGE_NAME $IMAGE_NAME=$IMAGE_NAME:$VERSION
 else
     echo "최초 배포: k8s 매니페스트 적용 중..."
-    kubectl apply -f /home/docker/k8s/agent-meeting.yaml
+    kubectl apply -f "$K8S_FILE"
     kubectl set image deployment/$IMAGE_NAME $IMAGE_NAME=$IMAGE_NAME:$VERSION
 fi
 
@@ -38,5 +40,5 @@ echo "=== 완료! ==="
 kubectl get pods -l app=$IMAGE_NAME
 
 echo ""
-echo "내부 접속: curl -H 'Host: agent-meeting.localhost' http://localhost:8080"
+echo "내부 접속: curl -H 'Host: meeting-notes.localhost' http://localhost:8080"
 echo "외부 접속: https://apps.slowstart.co.kr/meeting"
