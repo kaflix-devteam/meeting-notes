@@ -33,7 +33,7 @@ spec:
         - name: PORT
           value: "3000"
         - name: BASE_PATH
-          value: "/meeting"
+          value: ""
         - name: EXTERNAL_URL
           value: "https://meeting.kaflix.com"
         - name: DB_HOST

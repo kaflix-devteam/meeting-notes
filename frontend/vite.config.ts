@@ -4,7 +4,7 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/meeting/',
+  base: '/',
   plugins: [vue()],
   build: {
     outDir: path.resolve(__dirname, '../backend/public'),
