@@ -11,7 +11,7 @@ import type {
 } from '../types'
 
 const api = axios.create({
-  baseURL: '/meeting/api',
+  baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
   },
