@@ -7,6 +7,22 @@ const client = new Anthropic({
   apiKey: process.env.CLAUDE_API_KEY,
 });
 
+const apiKeyPrefix = (process.env.CLAUDE_API_KEY || '').slice(0, 4) || '(none)';
+
+function logAiCall(fn: string) {
+  console.log(`[ragService/${fn}] CLAUDE_API_KEY prefix=${apiKeyPrefix}`);
+}
+
+function logAiError(fn: string, error: unknown) {
+  const e = error as { status?: number; message?: string; error?: { type?: string; message?: string } };
+  console.error(`[ragService/${fn}] failed`, {
+    apiKeyPrefix,
+    status: e?.status,
+    type: e?.error?.type,
+    message: e?.error?.message || e?.message || String(error),
+  });
+}
+
 // ============================================================
 // Types
 // ============================================================
@@ -222,6 +238,7 @@ async function extractTextFromImage(
   filePath: string,
   fileType: string
 ): Promise<string> {
+  logAiCall('extractTextFromImage');
   try {
     const imageData = fs.readFileSync(filePath);
     const base64Image = imageData.toString('base64');
@@ -258,7 +275,7 @@ async function extractTextFromImage(
       ? message.content[0].text.trim()
       : '';
   } catch (error) {
-    console.error('[ragService] Image text extraction failed:', error);
+    logAiError('extractTextFromImage', error);
     return '';
   }
 }

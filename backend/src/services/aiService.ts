@@ -6,6 +6,22 @@ const client = new Anthropic({
   apiKey: process.env.CLAUDE_API_KEY,
 });
 
+const apiKeyPrefix = (process.env.CLAUDE_API_KEY || '').slice(0, 4) || '(none)';
+
+function logAiCall(fn: string) {
+  console.log(`[aiService/${fn}] CLAUDE_API_KEY prefix=${apiKeyPrefix}`);
+}
+
+function logAiError(fn: string, error: unknown) {
+  const e = error as { status?: number; message?: string; error?: { type?: string; message?: string } };
+  console.error(`[aiService/${fn}] failed`, {
+    apiKeyPrefix,
+    status: e?.status,
+    type: e?.error?.type,
+    message: e?.error?.message || e?.message || String(error),
+  });
+}
+
 const polishGuide = fs.readFileSync(
   path.join(__dirname, '../prompts/polish-guide.md'),
   'utf-8'
@@ -50,6 +66,7 @@ export async function analyzeReport(
   content: string,
   teamName: string
 ): Promise<AnalysisResult> {
+  logAiCall('analyzeReport');
   try {
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
@@ -84,7 +101,7 @@ ${content}
 
     return JSON.parse(jsonMatch[0]) as AnalysisResult;
   } catch (error) {
-    console.error(`[aiService] analyzeReport failed for team ${teamName}:`, error);
+    logAiError(`analyzeReport(team=${teamName})`, error);
     // Fallback: return a basic analysis without AI
     return {
       teamName,
@@ -104,6 +121,7 @@ export async function generateFinalReportHtml(
   analyses: TeamAnalysis[],
   reportDate: string
 ): Promise<string> {
+  logAiCall('generateFinalReportHtml');
   try {
     const analysisText = analyses
       .map(
@@ -172,7 +190,7 @@ ${analysisText}
     // Fallback: generate HTML manually
     return generateFallbackHtml(analyses, reportDate);
   } catch (error) {
-    console.error('[aiService] generateFinalReportHtml failed:', error);
+    logAiError('generateFinalReportHtml', error);
     return generateFallbackHtml(analyses, reportDate);
   }
 }
@@ -182,6 +200,7 @@ ${analysisText}
 // ============================================================
 
 export async function summarizeReport(content: string): Promise<string> {
+  logAiCall('summarizeReport');
   try {
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
@@ -200,7 +219,7 @@ ${content}`,
       ? message.content[0].text.trim()
       : '';
   } catch (error) {
-    console.error('[aiService] summarizeReport failed:', error);
+    logAiError('summarizeReport', error);
     return '요약을 생성할 수 없습니다.';
   }
 }
@@ -213,6 +232,7 @@ export async function generateMergeSummary(
   teams: { name: string; count: number }[],
   reportDate: string
 ): Promise<string> {
+  logAiCall('generateMergeSummary');
   try {
     const teamList = teams.map((t) => `- ${t.name}: ${t.count}건`).join('\n');
 
@@ -238,7 +258,7 @@ export async function generateMergeSummary(
       message.content[0].type === 'text' ? message.content[0].text : '';
     return responseText.trim();
   } catch (error) {
-    console.error('[aiService] generateMergeSummary failed:', error);
+    logAiError('generateMergeSummary', error);
     return `${reportDate} 업무보고서 - ${teams.map((t) => t.name).join(', ')} 팀의 보고서가 병합되었습니다.`;
   }
 }
@@ -248,6 +268,7 @@ export async function generateMergeSummary(
 // ============================================================
 
 export async function polishReport(contentHtml: string, previousContentHtml?: string): Promise<string> {
+  logAiCall('polishReport');
   try {
     let userPrompt: string;
 
@@ -326,7 +347,7 @@ HTML 구조 다듬기, 문체 정리, 하위 항목(ㄴ) 변환 등은 기존 �
 
     return trimmed || contentHtml;
   } catch (error) {
-    console.error('[aiService] polishReport failed:', error);
+    logAiError('polishReport', error);
     throw error;
   }
 }
