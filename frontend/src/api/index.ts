@@ -106,7 +106,24 @@ export function deleteReport(id: number) {
 }
 
 export function polishReport(contentHtml: string, previousContentHtml?: string) {
-  return api.post<{ content_html: string }>('/reports/polish', { content_html: contentHtml, previous_content_html: previousContentHtml })
+  return api.post<{ content_html: string; apiKeyPrefix?: string }>('/reports/polish', { content_html: contentHtml, previous_content_html: previousContentHtml })
+    .then((res) => {
+      const headerPrefix = res.headers['x-claude-key-prefix']
+      const bodyPrefix = res.data?.apiKeyPrefix
+      console.log('[polishReport] CLAUDE_API_KEY prefix:', bodyPrefix || headerPrefix || '(none)')
+      return res
+    })
+    .catch((err) => {
+      const headerPrefix = err?.response?.headers?.['x-claude-key-prefix']
+      const data = err?.response?.data
+      console.error('[polishReport] failed:', {
+        apiKeyPrefix: data?.apiKeyPrefix || headerPrefix || '(none)',
+        status: err?.response?.status,
+        detail: data?.detail,
+        body: data,
+      })
+      throw err
+    })
 }
 
 export function uploadAttachment(reportId: number, file: File) {

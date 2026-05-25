@@ -183,6 +183,8 @@ export async function checkDuplicate(req: Request, res: Response): Promise<void>
 }
 
 export async function polishReport(req: Request, res: Response): Promise<void> {
+  const apiKeyPrefix = (process.env.CLAUDE_API_KEY || '').slice(0, 4) || '(none)';
+  res.setHeader('X-Claude-Key-Prefix', apiKeyPrefix);
   try {
     const { content_html, previous_content_html } = req.body;
 
@@ -192,9 +194,18 @@ export async function polishReport(req: Request, res: Response): Promise<void> {
     }
 
     const polished = await polishReportAI(content_html, previous_content_html || undefined);
-    res.json({ content_html: polished });
+    res.json({ content_html: polished, apiKeyPrefix });
   } catch (error) {
     console.error('[reportController] polishReport error:', error);
-    res.status(500).json({ error: 'AI 다듬기에 실패했습니다.' });
+    const e = error as { status?: number; message?: string; error?: { type?: string; message?: string } };
+    res.status(500).json({
+      error: 'AI 다듬기에 실패했습니다.',
+      apiKeyPrefix,
+      detail: {
+        status: e?.status,
+        type: e?.error?.type,
+        message: e?.error?.message || e?.message || String(error),
+      },
+    });
   }
 }
