@@ -6,6 +6,8 @@ metadata:
     app: meeting-notes
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: meeting-notes
