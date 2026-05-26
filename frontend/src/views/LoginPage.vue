@@ -81,6 +81,12 @@ async function handleLogin() {
         <span>계정이 없으신가요?</span>
         <router-link to="/signup" class="login-card__link">회원가입</router-link>
       </div>
+
+      <div class="login-card__footer login-card__footer--secondary">
+        <router-link to="/forgot-password" class="login-card__link login-card__link--muted">
+          비밀번호를 잊으셨나요?
+        </router-link>
+      </div>
     </div>
   </div>
 </template>
@@ -151,5 +157,15 @@ async function handleLogin() {
 
 .login-card__link:hover {
   text-decoration: underline;
+}
+
+.login-card__footer--secondary {
+  margin-top: 12px;
+}
+
+.login-card__link--muted {
+  margin-left: 0;
+  font-weight: 400;
+  color: var(--metro-text-light);
 }
 </style>

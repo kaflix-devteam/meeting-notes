@@ -338,7 +338,7 @@ const archText = `
                        │ HTTPS
 ┌──────────────────────▼──────────────────────────────┐
 │               Kubernetes Ingress                     │
-│          (apps.slowstart.co.kr/meeting)              │
+│              (meeting.kaflix.com)                    │
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
@@ -368,7 +368,7 @@ doc.text(archText, 60, doc.y, { width: 490 });
 doc.moveDown(1);
 
 addSubTitle('접속 정보');
-addBullet('URL: https://apps.slowstart.co.kr/meeting');
+addBullet('URL: https://meeting.kaflix.com');
 addBullet('관리자 계정: admin / 1234');
 
 // End

@@ -1,6 +1,6 @@
 const { chromium } = require('playwright');
 
-const BASE = 'https://apps.slowstart.co.kr/meeting';
+const BASE = 'https://meeting.kaflix.com';
 
 async function main() {
   const browser = await chromium.launch({

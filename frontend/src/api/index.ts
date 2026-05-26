@@ -51,6 +51,24 @@ export function deleteUser(userId: number) {
   return api.delete(`/auth/users/${userId}`)
 }
 
+export function requestPasswordReset(email: string) {
+  return api.post<{ message: string }>('/auth/forgot-password', { email })
+}
+
+export function verifyResetToken(token: string) {
+  return api.get<{ valid: boolean; username?: string; display_name?: string; error?: string }>(
+    '/auth/reset-password/verify',
+    { params: { token } }
+  )
+}
+
+export function resetPassword(token: string, newPassword: string) {
+  return api.post<{ message: string }>('/auth/reset-password', {
+    token,
+    new_password: newPassword,
+  })
+}
+
 export function getAllTeams() {
   return api.get('/teams/all')
 }

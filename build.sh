@@ -41,4 +41,4 @@ kubectl get pods -l app=$IMAGE_NAME
 
 echo ""
 echo "내부 접속: curl -H 'Host: meeting-notes.localhost' http://localhost:8080"
-echo "외부 접속: https://apps.slowstart.co.kr/meeting"
+echo "외부 접속: https://meeting.kaflix.com"

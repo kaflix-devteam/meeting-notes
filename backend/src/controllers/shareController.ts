@@ -102,8 +102,7 @@ export async function sendShareEmail(req: Request, res: Response): Promise<void>
     }
 
     const reportDate = rows[0].report_date;
-    const baseUrl = process.env.EXTERNAL_URL || 'https://apps.slowstart.co.kr/meeting';
-    const shareUrl = `${baseUrl}/meetings/${id}?token=${token}`;
+    const shareUrl = `https://meeting.kaflix.com/meetings/${id}?token=${token}`;
 
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtps.hiworks.com',

@@ -9,6 +9,7 @@ const router = useRouter()
 const username = ref('')
 const password = ref('')
 const displayName = ref('')
+const email = ref('')
 const selectedDepartmentId = ref<number>(0)
 const selectedTeamId = ref<number>(0)
 
@@ -60,6 +61,10 @@ async function handleSubmit() {
     errorMsg.value = '이름을 입력해주세요.'
     return
   }
+  if (email.value.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) {
+    errorMsg.value = '올바른 이메일 형식이 아닙니다.'
+    return
+  }
   if (!selectedDepartmentId.value) {
     errorMsg.value = '소속을 선택해주세요.'
     return
@@ -76,6 +81,7 @@ async function handleSubmit() {
       password: password.value,
       display_name: displayName.value.trim(),
       team_id: selectedTeamId.value,
+      ...(email.value.trim() ? { email: email.value.trim() } : {}),
     })
     successMsg.value = '회원가입이 완료되었습니다! 로그인 페이지로 이동합니다.'
     setTimeout(() => router.push('/login'), 1500)
@@ -125,6 +131,18 @@ async function handleSubmit() {
           type="text"
           class="metro-input"
           placeholder="이름을 입력하세요"
+        />
+      </div>
+
+      <div class="signup-form__field">
+        <label class="metro-label" for="email">이메일 <span class="signup-form__hint">(비밀번호 찾기에 사용)</span></label>
+        <input
+          id="email"
+          v-model="email"
+          type="email"
+          class="metro-input"
+          placeholder="email@example.com"
+          autocomplete="email"
         />
       </div>
 
@@ -230,6 +248,13 @@ async function handleSubmit() {
   font-size: 12px;
   color: var(--metro-text-light);
   margin-top: 4px;
+}
+
+.signup-form__hint {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--metro-text-light);
+  margin-left: 4px;
 }
 
 .signup-form__error {

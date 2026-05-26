@@ -59,6 +59,7 @@ export interface SignupPayload {
   password: string
   display_name: string
   team_id: number
+  email?: string
 }
 
 export interface User {
@@ -72,4 +73,5 @@ export interface User {
   department_id?: number
   department_name?: string
   department_color?: string
+  email?: string | null
 }
