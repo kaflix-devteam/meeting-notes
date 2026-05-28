@@ -2,8 +2,15 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import pool from '../config/database';
-export async function getMeetingNotes(_req: Request, res: Response): Promise<void> {
+export async function getMeetingNotes(req: Request, res: Response): Promise<void> {
   try {
+    const all = req.query.all === 'true';
+    const userIdRaw = req.query.user_id as string | undefined;
+    const userId = userIdRaw ? parseInt(userIdRaw, 10) : NaN;
+
+    const whereClause = !all && !isNaN(userId) ? 'WHERE m.user_id = $1' : '';
+    const params: any[] = !all && !isNaN(userId) ? [userId] : [];
+
     const { rows } = await pool.query(`SELECT m.id, to_char(m.report_date, 'YYYY-MM-DD') AS report_date,
               m.user_id, m.team_id, m.department_id, m.content_html, m.tag_signature,
               m.created_at, m.updated_at,
@@ -14,7 +21,8 @@ export async function getMeetingNotes(_req: Request, res: Response): Promise<voi
        LEFT JOIN departments d ON m.department_id = d.id
        LEFT JOIN teams t ON m.team_id = t.id
        LEFT JOIN users u ON m.user_id = u.id
-       ORDER BY m.report_date DESC, m.created_at DESC`);
+       ${whereClause}
+       ORDER BY m.report_date DESC, m.created_at DESC`, params);
 
     // 태그 이름 일괄 조회
     const allTagIds = new Set<number>();

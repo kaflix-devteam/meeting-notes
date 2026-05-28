@@ -2,8 +2,10 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getMeetingNotesList } from '../api'
+import { useAuthStore } from '../stores/authStore'
 
 const router = useRouter()
+const auth = useAuthStore()
 const notes = ref<any[]>([])
 const loading = ref(true)
 
@@ -16,7 +18,9 @@ function getDayName(dateStr: string): string {
 
 onMounted(async () => {
   try {
-    const res = await getMeetingNotesList()
+    const res = auth.isAdmin
+      ? await getMeetingNotesList({ all: true })
+      : await getMeetingNotesList({ userId: auth.user?.id })
     notes.value = res.data
   } catch { /* ignore */ }
   finally { loading.value = false }

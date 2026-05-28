@@ -219,7 +219,13 @@ export function setReportTags(reportId: number, tagIds: number[]) {
 }
 
 // Meeting Notes (회의록)
-export function getMeetingNotesList() {
+export function getMeetingNotesList(params?: { userId?: number; all?: boolean }) {
+  if (params?.all) {
+    return api.get<any[]>('/meeting-notes', { params: { all: 'true' } })
+  }
+  if (params?.userId) {
+    return api.get<any[]>('/meeting-notes', { params: { user_id: params.userId } })
+  }
   return api.get<any[]>('/meeting-notes')
 }
 
