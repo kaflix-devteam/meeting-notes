@@ -75,6 +75,11 @@ spec:
             secretKeyRef:
               name: meeting-notes-secret
               key: SMTP_PASS
+        - name: MCP_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: meeting-notes-secret
+              key: MCP_TOKEN
 ---
 apiVersion: v1
 kind: Service

@@ -15,6 +15,7 @@ import authRouter from './routes/auth';
 import tagsRouter from './routes/tags';
 import meetingNotesRouter from './routes/meetingNotes';
 import noticesRouter from './routes/notices';
+import { mountMcp } from './mcp/server';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -40,6 +41,18 @@ app.use('/api/auth', authRouter);
 app.use('/api/tags', tagsRouter);
 app.use('/api/meeting-notes', meetingNotesRouter);
 app.use('/api/notices', noticesRouter);
+
+// MCP (Model Context Protocol) — 외부 클라이언트 접속 허용
+app.use(
+  '/mcp',
+  cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Accept', 'mcp-session-id', 'mcp-protocol-version', 'Authorization'],
+    exposedHeaders: ['mcp-session-id', 'mcp-protocol-version'],
+  }),
+);
+mountMcp(app);
 
 // Health check
 app.get('/api/health', (_req, res) => {
