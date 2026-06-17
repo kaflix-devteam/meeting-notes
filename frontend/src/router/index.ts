@@ -96,7 +96,8 @@ router.beforeEach((to) => {
   const hasUser = !!raw
 
   if (!isPublic && !hasToken && !hasUser) {
-    return { name: 'login' }
+    window.location.href = '/api/auth/sso/login'
+    return false
   }
 
   if (to.meta.admin === true && raw) {
