@@ -94,7 +94,7 @@ export async function provisionUser(claims: {
   groups?: string[];
 }): Promise<any> {
   const { sub, email, name, preferred_username, groups } = claims;
-  const isAdmin = Array.isArray(groups) && groups.includes('leadership');
+  const isAdmin = Array.isArray(groups) && groups.includes('leadership') ? 1 : 0;
 
   // keycloak_sub 로 기존 유저 검색
   const { rows: existing } = await pool.query(
