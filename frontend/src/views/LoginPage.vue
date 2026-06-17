@@ -17,6 +17,11 @@ onMounted(async () => {
   const ssoToken = route.query.sso_token as string
   const ssoError = route.query.sso_error as string
 
+  if (!ssoToken && !ssoError && !route.query.manual) {
+    window.location.href = '/api/auth/sso/login'
+    return
+  }
+
   if (ssoError) {
     const messages: Record<string, string> = {
       invalid_state: 'SSO 인증 상태가 유효하지 않습니다.',
