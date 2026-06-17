@@ -8,6 +8,9 @@ import {
   forgotPassword,
   verifyResetToken,
   resetPassword,
+  ssoLogin,
+  ssoCallback,
+  ssoVerify,
 } from '../controllers/authController';
 
 const router = Router();
@@ -22,5 +25,10 @@ router.delete('/users/:id', deleteUser);
 router.post('/forgot-password', forgotPassword);
 router.get('/reset-password/verify', verifyResetToken);
 router.post('/reset-password', resetPassword);
+
+// SSO (Keycloak OIDC)
+router.get('/sso/login', ssoLogin);
+router.get('/callback/keycloak', ssoCallback);
+router.get('/sso/verify', ssoVerify);
 
 export default router;

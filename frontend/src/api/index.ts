@@ -69,6 +69,10 @@ export function resetPassword(token: string, newPassword: string) {
   })
 }
 
+export function verifySsoToken(token: string) {
+  return api.get<User>('/auth/sso/verify', { params: { token } })
+}
+
 export function getAllTeams() {
   return api.get('/teams/all')
 }

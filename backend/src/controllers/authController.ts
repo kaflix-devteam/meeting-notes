@@ -2,6 +2,14 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import pool from '../config/database';
+import {
+  getClient,
+  buildAuthUrl,
+  consumeState,
+  storeSsoToken,
+  consumeSsoToken,
+  provisionUser,
+} from '../services/oidcService';
 
 // 비밀번호 재설정 토큰 유효 시간 (1시간)
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -291,6 +299,97 @@ export async function verifyResetToken(req: Request, res: Response): Promise<voi
   } catch (error) {
     console.error('[authController] verifyResetToken error:', error);
     res.status(500).json({ valid: false, error: '토큰 검증에 실패했습니다.' });
+  }
+}
+
+// ============================================================
+// SSO (Keycloak OIDC)
+// ============================================================
+
+export async function ssoLogin(_req: Request, res: Response): Promise<void> {
+  try {
+    const client = await getClient();
+    const { url } = buildAuthUrl(client);
+    res.redirect(url);
+  } catch (error) {
+    console.error('[authController] ssoLogin error:', error);
+    res.status(500).json({ error: 'SSO 로그인 초기화에 실패했습니다.' });
+  }
+}
+
+export async function ssoCallback(req: Request, res: Response): Promise<void> {
+  try {
+    const client = await getClient();
+    const params = client.callbackParams(req);
+
+    if (!params.state) {
+      res.redirect('/login?sso_error=invalid_state');
+      return;
+    }
+
+    const pending = consumeState(params.state);
+    if (!pending) {
+      res.redirect('/login?sso_error=expired_state');
+      return;
+    }
+
+    const redirectUri = `${process.env.EXTERNAL_URL || 'https://meeting.kaflix.com'}/api/auth/callback/keycloak`;
+
+    const tokenSet = await client.callback(redirectUri, params, {
+      state: params.state,
+      nonce: pending.nonce,
+      code_verifier: pending.codeVerifier,
+    });
+
+    const claims = tokenSet.claims();
+    const userinfo = await client.userinfo(tokenSet.access_token!);
+
+    const user = await provisionUser({
+      sub: claims.sub,
+      email: (userinfo.email as string) || undefined,
+      name: (userinfo.name as string) || undefined,
+      preferred_username: (userinfo.preferred_username as string) || undefined,
+      groups: (userinfo.groups as string[]) || undefined,
+    });
+
+    const ssoToken = storeSsoToken({
+      id: user.id,
+      username: user.username,
+      display_name: user.display_name,
+      is_admin: !!user.is_admin,
+      team_id: user.team_id,
+      team_name: user.team_name,
+      team_color: user.team_color,
+      department_id: user.department_id,
+      department_name: user.department_name,
+      department_color: user.department_color,
+    });
+
+    res.redirect(`/login?sso_token=${ssoToken}`);
+  } catch (error) {
+    console.error('[authController] ssoCallback error:', error);
+    res.redirect('/login?sso_error=callback_failed');
+  }
+}
+
+export async function ssoVerify(req: Request, res: Response): Promise<void> {
+  try {
+    const token = typeof req.query.token === 'string' ? req.query.token : '';
+    if (!token) {
+      res.status(400).json({ error: '토큰이 필요합니다.' });
+      return;
+    }
+
+    const user = consumeSsoToken(token);
+    if (!user) {
+      res.status(401).json({ error: '유효하지 않거나 만료된 SSO 토큰입니다.' });
+      return;
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error('[authController] ssoVerify error:', error);
+    res.status(500).json({ error: 'SSO 인증 확인에 실패했습니다.' });
   }
 }
 

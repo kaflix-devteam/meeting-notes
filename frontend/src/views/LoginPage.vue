@@ -1,15 +1,50 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 
 const username = ref('')
 const password = ref('')
 const submitting = ref(false)
+const ssoLoading = ref(false)
 const errorMsg = ref('')
+
+onMounted(async () => {
+  const ssoToken = route.query.sso_token as string
+  const ssoError = route.query.sso_error as string
+
+  if (ssoError) {
+    const messages: Record<string, string> = {
+      invalid_state: 'SSO 인증 상태가 유효하지 않습니다.',
+      expired_state: 'SSO 인증이 만료되었습니다. 다시 시도해주세요.',
+      callback_failed: 'SSO 인증에 실패했습니다.',
+    }
+    errorMsg.value = messages[ssoError] || 'SSO 로그인에 실패했습니다.'
+    router.replace({ query: {} })
+    return
+  }
+
+  if (ssoToken) {
+    ssoLoading.value = true
+    try {
+      await auth.loginWithSsoToken(ssoToken)
+      router.replace('/meetings')
+    } catch {
+      errorMsg.value = 'SSO 인증 확인에 실패했습니다. 다시 시도해주세요.'
+      router.replace({ query: {} })
+    } finally {
+      ssoLoading.value = false
+    }
+  }
+})
+
+function handleSsoLogin() {
+  window.location.href = '/api/auth/sso/login'
+}
 
 async function handleLogin() {
   errorMsg.value = ''
@@ -40,6 +75,21 @@ async function handleLogin() {
     <div class="login-card metro-card">
       <h1 class="login-card__title">Meeting Agent</h1>
       <p class="login-card__subtitle">로그인하여 시작하세요</p>
+
+      <div v-if="ssoLoading" class="login-card__sso-loading">SSO 인증 처리 중...</div>
+
+      <template v-else>
+        <button
+          type="button"
+          class="metro-btn login-card__sso-btn"
+          @click="handleSsoLogin"
+        >
+          kaflix SSO 로그인
+        </button>
+
+        <div class="login-card__divider">
+          <span>또는</span>
+        </div>
 
       <form @submit.prevent="handleLogin">
         <div class="login-card__field">
@@ -87,6 +137,7 @@ async function handleLogin() {
           비밀번호를 잊으셨나요?
         </router-link>
       </div>
+      </template>
     </div>
   </div>
 </template>
@@ -167,5 +218,48 @@ async function handleLogin() {
   margin-left: 0;
   font-weight: 400;
   color: var(--metro-text-light);
+}
+
+.login-card__sso-btn {
+  width: 100%;
+  padding: 12px;
+  background: #1a73e8;
+  color: #fff;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.login-card__sso-btn:hover {
+  background: #1557b0;
+}
+
+.login-card__divider {
+  display: flex;
+  align-items: center;
+  margin: 24px 0;
+  color: var(--metro-text-light);
+  font-size: 13px;
+}
+
+.login-card__divider::before,
+.login-card__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--metro-border, #ddd);
+}
+
+.login-card__divider span {
+  padding: 0 12px;
+}
+
+.login-card__sso-loading {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--metro-text-light);
+  font-size: 15px;
 }
 </style>

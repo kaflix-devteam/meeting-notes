@@ -29,6 +29,12 @@ export const useAuthStore = defineStore('auth', () => {
     saveUser(res.data)
   }
 
+  async function loginWithSsoToken(token: string): Promise<void> {
+    const res = await api.verifySsoToken(token)
+    user.value = res.data
+    saveUser(res.data)
+  }
+
   function logout() {
     user.value = null
     localStorage.removeItem(STORAGE_KEY)
@@ -39,6 +45,7 @@ export const useAuthStore = defineStore('auth', () => {
     isLoggedIn,
     isAdmin,
     login,
+    loginWithSsoToken,
     logout,
   }
 })

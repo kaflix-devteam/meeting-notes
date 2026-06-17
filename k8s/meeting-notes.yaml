@@ -80,6 +80,11 @@ spec:
             secretKeyRef:
               name: meeting-notes-secret
               key: MCP_TOKEN
+        - name: OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: meeting-notes-secret
+              key: OIDC_CLIENT_SECRET
 ---
 apiVersion: v1
 kind: Service
