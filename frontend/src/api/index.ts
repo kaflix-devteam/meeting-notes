@@ -73,6 +73,28 @@ export function verifySsoToken(token: string) {
   return api.get<User>('/auth/sso/verify', { params: { token } })
 }
 
+// 개인 MCP 토큰
+export interface McpToken {
+  id: number
+  name: string
+  token_prefix: string
+  created_at: string
+  last_used_at: string | null
+  revoked_at: string | null
+}
+
+export function getMcpTokens(userId: number) {
+  return api.get<McpToken[]>('/tokens', { params: { user_id: userId } })
+}
+
+export function createMcpToken(userId: number, name: string) {
+  return api.post<McpToken & { token: string }>('/tokens', { user_id: userId, name })
+}
+
+export function deleteMcpToken(userId: number, tokenId: number) {
+  return api.delete<{ message: string }>(`/tokens/${tokenId}`, { data: { user_id: userId } })
+}
+
 export function getAllTeams() {
   return api.get('/teams/all')
 }

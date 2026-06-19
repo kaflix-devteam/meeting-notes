@@ -77,6 +77,11 @@ const router = createRouter({
       component: () => import('../views/MyReportsPage.vue'),
     },
     {
+      path: '/tokens',
+      name: 'token-management',
+      component: () => import('../views/TokenManagementPage.vue'),
+    },
+    {
       path: '/admin/users',
       name: 'user-management',
       component: () => import('../views/UserManagementPage.vue'),

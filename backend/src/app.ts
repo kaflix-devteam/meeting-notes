@@ -15,6 +15,7 @@ import authRouter from './routes/auth';
 import tagsRouter from './routes/tags';
 import meetingNotesRouter from './routes/meetingNotes';
 import noticesRouter from './routes/notices';
+import tokensRouter from './routes/tokens';
 import { mountMcp } from './mcp/server';
 
 const app = express();
@@ -41,6 +42,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/tags', tagsRouter);
 app.use('/api/meeting-notes', meetingNotesRouter);
 app.use('/api/notices', noticesRouter);
+app.use('/api/tokens', tokensRouter);
 
 // MCP (Model Context Protocol) — 외부 클라이언트 접속 허용
 app.use(

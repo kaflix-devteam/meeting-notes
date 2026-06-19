@@ -21,6 +21,7 @@ function handleLogout() {
         <router-link to="/notes">회의록</router-link>
         <router-link to="/my-reports">내 보고서</router-link>
         <router-link to="/notices">공지</router-link>
+        <router-link to="/tokens">MCP 토큰</router-link>
         <router-link to="/admin/users">사용자</router-link>
         <router-link to="/admin/teams">팀</router-link>
       </nav>
