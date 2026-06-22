@@ -5,6 +5,7 @@ import pool from '../config/database';
 import {
   getClient,
   buildAuthUrl,
+  buildLogoutUrl,
   consumeState,
   storeSsoToken,
   consumeSsoToken,
@@ -314,6 +315,16 @@ export async function ssoLogin(_req: Request, res: Response): Promise<void> {
   } catch (error) {
     console.error('[authController] ssoLogin error:', error);
     res.status(500).json({ error: 'SSO 로그인 초기화에 실패했습니다.' });
+  }
+}
+
+export async function ssoLogout(_req: Request, res: Response): Promise<void> {
+  try {
+    const url = await buildLogoutUrl();
+    res.redirect(url);
+  } catch (error) {
+    console.error('[authController] ssoLogout error:', error);
+    res.redirect('/login?loggedout=1');
   }
 }
 

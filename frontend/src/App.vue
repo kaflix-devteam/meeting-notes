@@ -7,8 +7,8 @@ const router = useRouter()
 const auth = useAuthStore()
 
 function handleLogout() {
+  // logout() 이 IdP 로그아웃(SSO) 또는 /login?loggedout=1 로 풀페이지 이동을 직접 처리한다.
   auth.logout()
-  router.push('/login')
 }
 </script>
 

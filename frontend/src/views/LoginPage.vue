@@ -12,13 +12,17 @@ const password = ref('')
 const submitting = ref(false)
 const ssoLoading = ref(false)
 const errorMsg = ref('')
+const infoMsg = ref('')
 
 onMounted(async () => {
   const ssoToken = route.query.sso_token as string
   const ssoError = route.query.sso_error as string
+  const loggedOut = route.query.loggedout
 
-  if (!ssoToken && !ssoError && !route.query.manual) {
-    window.location.href = '/api/auth/sso/login'
+  // 로그아웃 직후 착지: 자동 SSO 송출 없이 선택 화면을 보여준다 (재로그인 루프 방지)
+  if (loggedOut) {
+    infoMsg.value = '로그아웃되었습니다.'
+    router.replace({ query: {} })
     return
   }
 
@@ -84,6 +88,8 @@ async function handleLogin() {
       <div v-if="ssoLoading" class="login-card__sso-loading">SSO 인증 처리 중...</div>
 
       <template v-else>
+        <div v-if="infoMsg" class="login-card__info">{{ infoMsg }}</div>
+
         <button
           type="button"
           class="metro-btn login-card__sso-btn"
@@ -266,5 +272,15 @@ async function handleLogin() {
   padding: 40px 0;
   color: var(--metro-text-light);
   font-size: 15px;
+}
+
+.login-card__info {
+  color: var(--metro-blue);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px;
+  background: #eff6fc;
+  border-left: 3px solid var(--metro-blue);
+  margin-bottom: 16px;
 }
 </style>

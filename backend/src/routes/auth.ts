@@ -9,6 +9,7 @@ import {
   verifyResetToken,
   resetPassword,
   ssoLogin,
+  ssoLogout,
   ssoCallback,
   ssoVerify,
 } from '../controllers/authController';
@@ -28,6 +29,7 @@ router.post('/reset-password', resetPassword);
 
 // SSO (Keycloak OIDC)
 router.get('/sso/login', ssoLogin);
+router.get('/sso/logout', ssoLogout);
 router.get('/callback/keycloak', ssoCallback);
 router.get('/sso/verify', ssoVerify);
 

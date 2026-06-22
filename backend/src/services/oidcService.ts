@@ -73,6 +73,23 @@ export function consumeState(state: string): PendingAuth | null {
   return entry;
 }
 
+// RP-initiated logout: Keycloak end_session_endpoint 로 보내 IdP 세션까지 끊는다.
+// id_token 을 보관하지 않으므로 client_id + post_logout_redirect_uri 조합을 사용한다.
+export async function buildLogoutUrl(): Promise<string> {
+  const postLogout = `${process.env.EXTERNAL_URL || 'https://meeting.kaflix.com'}/login?loggedout=1`;
+  try {
+    const client = await getClient();
+    const endSession = client.issuer.metadata.end_session_endpoint;
+    if (!endSession) return postLogout;
+    const url = new URL(endSession);
+    url.searchParams.set('client_id', CLIENT_ID);
+    url.searchParams.set('post_logout_redirect_uri', postLogout);
+    return url.toString();
+  } catch {
+    return postLogout;
+  }
+}
+
 export function storeSsoToken(user: any): string {
   const token = crypto.randomBytes(32).toString('hex');
   ssoTokens.set(token, { user, createdAt: Date.now() });
