@@ -2,9 +2,21 @@
 import { ref } from 'vue'
 import { uploadAttachment } from '../api'
 
+interface ExistingAttachment {
+  id: number
+  original_name: string
+  stored_name: string
+  file_type: string
+}
+
 const props = defineProps<{
   reportId?: number
+  existing?: ExistingAttachment[]
 }>()
+
+function isImage(fileType: string): boolean {
+  return !!fileType && fileType.startsWith('image/')
+}
 
 const files = ref<File[]>([])
 const uploading = ref(false)
@@ -63,6 +75,29 @@ defineExpose({ files, uploadAll })
 <template>
   <div class="file-uploader">
     <label class="metro-label">Attachments</label>
+
+    <!-- 기존에 업로드된 첨부 (보고서 다시 열었을 때 표시) -->
+    <div v-if="existing && existing.length > 0" class="file-uploader__existing">
+      <div v-for="att in existing" :key="att.id" class="file-uploader__existing-item">
+        <a
+          v-if="isImage(att.file_type)"
+          :href="`/uploads/${att.stored_name}`"
+          target="_blank"
+          rel="noopener"
+          class="file-uploader__thumb-link"
+        >
+          <img :src="`/uploads/${att.stored_name}`" :alt="att.original_name" class="file-uploader__thumb" />
+        </a>
+        <a
+          :href="`/api/attachments/${att.id}/download`"
+          class="file-uploader__existing-name"
+          :title="att.original_name"
+        >
+          {{ att.original_name }}
+        </a>
+      </div>
+    </div>
+
     <div class="file-uploader__zone">
       <input
         type="file"
@@ -93,6 +128,43 @@ defineExpose({ files, uploadAll })
 </template>
 
 <style scoped>
+.file-uploader__existing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.file-uploader__existing-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 120px;
+}
+
+.file-uploader__thumb {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border: 1px solid var(--metro-border);
+  display: block;
+}
+
+.file-uploader__existing-name {
+  font-size: 12px;
+  color: var(--metro-blue);
+  text-decoration: none;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-uploader__existing-name:hover {
+  text-decoration: underline;
+}
+
 .file-uploader__zone {
   border: 2px dashed var(--metro-border);
   padding: 24px;
