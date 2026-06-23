@@ -20,7 +20,10 @@ const editTeamId = ref<number>(0)
 const editTeamsLoading = ref(false)
 const editTeams = ref<Team[]>([])
 const editDisplayName = ref('')
+const editUsername = ref('')
 const deletingUserId = ref<number | null>(null)
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 onMounted(async () => {
   try {
@@ -40,6 +43,7 @@ onMounted(async () => {
 function startEdit(user: User) {
   editingUserId.value = user.id
   editDisplayName.value = user.display_name || ''
+  editUsername.value = user.username || ''
   editDeptId.value = user.department_id || 0
   editTeamId.value = user.team_id
   // 소속에 해당하는 팀 목록 로드
@@ -51,6 +55,7 @@ function startEdit(user: User) {
 function cancelEdit() {
   editingUserId.value = null
   editDisplayName.value = ''
+  editUsername.value = ''
   editDeptId.value = 0
   editTeamId.value = 0
   editTeams.value = []
@@ -81,11 +86,22 @@ async function saveEdit(user: User) {
     errorMsg.value = '팀을 선택해주세요.'
     return
   }
+  // 수퍼어드민은 로그인 ID(username)도 변경 가능 — 이메일 형식 필수
+  const newUsername = editUsername.value.trim()
+  if (auth.isAdmin && newUsername && !EMAIL_RE.test(newUsername)) {
+    errorMsg.value = '아이디는 이메일 형식이어야 합니다.'
+    return
+  }
   errorMsg.value = ''
   successMsg.value = ''
 
   try {
-    const res = await api.updateUserTeam(user.id, editTeamId.value || undefined, editDisplayName.value || undefined)
+    const res = await api.updateUserTeam(
+      user.id,
+      editTeamId.value || undefined,
+      editDisplayName.value || undefined,
+      auth.isAdmin && newUsername && newUsername !== user.username ? newUsername : undefined,
+    )
     // 목록 갱신
     const idx = users.value.findIndex(u => u.id === user.id)
     if (idx >= 0) {
@@ -142,7 +158,10 @@ async function handleDeleteUser(user: User) {
         <tbody>
           <tr v-for="user in users" :key="user.id">
             <td>{{ user.id }}</td>
-            <td>{{ user.username }}</td>
+            <td v-if="!auth.isAdmin || editingUserId !== user.id">{{ user.username }}</td>
+            <td v-else>
+              <input v-model="editUsername" class="metro-input user-mgmt__name-input" placeholder="아이디(이메일)" />
+            </td>
             <td v-if="!auth.isAdmin || editingUserId !== user.id">
               {{ user.display_name }}
               <span v-if="user.is_admin" class="user-mgmt__admin-badge">ADMIN</span>
