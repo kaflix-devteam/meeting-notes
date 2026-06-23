@@ -124,11 +124,30 @@ export async function getUsers(_req: Request, res: Response): Promise<void> {
 export async function updateUserTeam(req: Request, res: Response): Promise<void> {
   try {
     const userId = parseInt(req.params.id as string, 10);
-    const { team_id, display_name } = req.body;
+    const { team_id, display_name, username } = req.body;
 
     if (isNaN(userId)) {
       res.status(400).json({ error: 'user id가 필요합니다.' });
       return;
+    }
+
+    // 아이디(username) 변경 — 이메일 형식 + 중복 검사
+    if (username && username.trim()) {
+      const newUsername = username.trim();
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRe.test(newUsername)) {
+        res.status(400).json({ error: '아이디는 이메일 형식이어야 합니다.' });
+        return;
+      }
+      const { rows: dup } = await pool.query(
+        'SELECT id FROM users WHERE username = $1 AND id <> $2',
+        [newUsername, userId]
+      );
+      if (dup.length > 0) {
+        res.status(409).json({ error: '이미 사용 중인 아이디입니다.' });
+        return;
+      }
+      await pool.query('UPDATE users SET username = $1 WHERE id = $2', [newUsername, userId]);
     }
 
     // 팀 변경

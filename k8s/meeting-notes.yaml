@@ -103,6 +103,8 @@ metadata:
   name: meeting-notes-ingress
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    # 첨부파일 업로드 한도 (백엔드 multer 한도 10MB와 일치). 미설정 시 nginx 기본 1MB로 413 발생
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
 spec:
   ingressClassName: nginx
   tls:

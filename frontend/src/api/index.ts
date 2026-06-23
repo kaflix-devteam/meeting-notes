@@ -40,10 +40,11 @@ export function getUsers() {
   return api.get<User[]>('/auth/users')
 }
 
-export function updateUserTeam(userId: number, teamId?: number, displayName?: string) {
+export function updateUserTeam(userId: number, teamId?: number, displayName?: string, username?: string) {
   return api.put<User>(`/auth/users/${userId}`, {
     ...(teamId ? { team_id: teamId } : {}),
     ...(displayName ? { display_name: displayName } : {}),
+    ...(username ? { username } : {}),
   })
 }
 
