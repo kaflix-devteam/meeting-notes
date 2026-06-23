@@ -31,6 +31,10 @@ const successMsg = ref('')
 const fileUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null)
 const existingAttachments = ref<any[]>([])
 
+function onAttachmentDeleted(id: number) {
+  existingAttachments.value = existingAttachments.value.filter(a => a.id !== id)
+}
+
 const previousReport = ref<any>(null)
 const loadingPrevious = ref(false)
 
@@ -331,7 +335,7 @@ async function handleSave() {
               <RichEditor v-model="content" :editable="!polishing" />
             </div>
 
-            <FileUploader ref="fileUploaderRef" :report-id="reportId" :existing="existingAttachments" />
+            <FileUploader ref="fileUploaderRef" :report-id="reportId" :existing="existingAttachments" @deleted="onAttachmentDeleted" />
           </div>
         </div>
       </div>

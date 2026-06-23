@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { uploadAttachment } from '../api'
+import { uploadAttachment, deleteAttachment } from '../api'
 
 interface ExistingAttachment {
   id: number
@@ -14,8 +14,27 @@ const props = defineProps<{
   existing?: ExistingAttachment[]
 }>()
 
+const emit = defineEmits<{
+  deleted: [id: number]
+}>()
+
+const deletingId = ref<number | null>(null)
+
 function isImage(fileType: string): boolean {
   return !!fileType && fileType.startsWith('image/')
+}
+
+async function removeExisting(att: ExistingAttachment) {
+  if (!confirm(`'${att.original_name}' 첨부를 삭제하시겠습니까?`)) return
+  deletingId.value = att.id
+  try {
+    await deleteAttachment(att.id)
+    emit('deleted', att.id)
+  } catch (e: any) {
+    errorMsg.value = e.response?.data?.error || '첨부 삭제에 실패했습니다.'
+  } finally {
+    deletingId.value = null
+  }
 }
 
 const files = ref<File[]>([])
@@ -95,6 +114,14 @@ defineExpose({ files, uploadAll })
         >
           {{ att.original_name }}
         </a>
+        <button
+          type="button"
+          class="file-uploader__existing-delete"
+          :disabled="deletingId === att.id"
+          @click="removeExisting(att)"
+        >
+          {{ deletingId === att.id ? '삭제 중...' : '삭제' }}
+        </button>
       </div>
     </div>
 
@@ -162,6 +189,20 @@ defineExpose({ files, uploadAll })
 }
 
 .file-uploader__existing-name:hover {
+  text-decoration: underline;
+}
+
+.file-uploader__existing-delete {
+  background: none;
+  border: none;
+  color: var(--metro-red);
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+}
+
+.file-uploader__existing-delete:hover {
   text-decoration: underline;
 }
 
