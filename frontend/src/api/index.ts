@@ -171,6 +171,10 @@ export function polishReport(contentHtml: string, previousContentHtml?: string) 
     })
 }
 
+export function deleteAttachment(attachmentId: number) {
+  return api.delete(`/attachments/${attachmentId}`)
+}
+
 export function uploadAttachment(reportId: number, file: File) {
   const formData = new FormData()
   formData.append('file', file)
