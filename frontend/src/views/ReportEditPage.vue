@@ -29,6 +29,7 @@ const loading = ref(true)
 const errorMsg = ref('')
 const successMsg = ref('')
 const fileUploaderRef = ref<InstanceType<typeof FileUploader> | null>(null)
+const existingAttachments = ref<any[]>([])
 
 const previousReport = ref<any>(null)
 const loadingPrevious = ref(false)
@@ -105,6 +106,7 @@ onMounted(async () => {
     content.value = reportRes.data.content_html
     reportDate.value = reportRes.data.report_date
     reportUserId.value = reportRes.data.user_id
+    existingAttachments.value = (reportRes.data as any).attachments || []
     departments.value = deptRes.data
     allTeams.value = teamRes.data
 
@@ -329,7 +331,7 @@ async function handleSave() {
               <RichEditor v-model="content" :editable="!polishing" />
             </div>
 
-            <FileUploader ref="fileUploaderRef" :report-id="reportId" />
+            <FileUploader ref="fileUploaderRef" :report-id="reportId" :existing="existingAttachments" />
           </div>
         </div>
       </div>
