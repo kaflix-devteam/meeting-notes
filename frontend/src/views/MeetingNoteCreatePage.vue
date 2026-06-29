@@ -7,12 +7,43 @@ import TagInput from '../components/TagInput.vue'
 import { useAuthStore } from '../stores/authStore'
 import { getDepartments, getTeams, createMeetingNote } from '../api'
 import { hasPendingUploads, waitForUploads } from '../extensions/clipboardImagePaste'
+import { useSpeechRecognition } from '../composables/useSpeechRecognition'
 import type { Department, Team } from '../types'
 
 const router = useRouter()
 const auth = useAuthStore()
 
 const content = ref('')
+
+// STT 평문 → HTML 안전 삽입 (& < > " 이스케이프)
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+// 확정(final) 텍스트를 본문 HTML 에 <p> 로 append
+function appendFinalText(text: string) {
+  const p = `<p>${escapeHtml(text)}</p>`
+  const cur = content.value
+  // 초기 '' 또는 빈 에디터 '<p></p>' 면 교체(선행 빈 단락 방지), 아니면 누적
+  if (!cur || cur === '<p></p>') {
+    content.value = p
+  } else {
+    content.value = cur + p
+  }
+}
+
+const {
+  isSupported: sttSupported,
+  isRecording,
+  interimText,
+  error: sttError,
+  toggle: toggleRecording,
+  stop: stopRecording,
+} = useSpeechRecognition({ onFinal: appendFinalText })
 const reportDate = ref('')
 const saving = ref(false)
 const savedNoteId = ref<number | null>(null)
@@ -67,27 +98,34 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('click', closeDropdowns)
+  stopRecording()
 })
 
 async function handleSave() {
-  if (!content.value || content.value === '<p></p>') {
-    errorMsg.value = '회의록 내용을 작성해주세요.'
-    return
-  }
-  if (!reportDate.value) {
-    alert('보고 날짜를 지정해 주세요')
-    return
-  }
-  if (!selectedDeptId.value) {
-    errorMsg.value = '사업부를 선택해주세요.'
-    return
-  }
-
-  saving.value = true
+  if (saving.value) return // 중복 저장(노트 2개 생성) 방지
+  saving.value = true // guard 직후·await 이전에 켜서 flush 대기 구간 재진입을 원자적으로 차단
   errorMsg.value = ''
   successMsg.value = ''
 
   try {
+    // 녹음 중이면 먼저 중지하고 onend(마지막 final flush 완료)까지 대기 후 검증
+    if (isRecording.value) {
+      await stopRecording()
+    }
+
+    if (!content.value || content.value === '<p></p>') {
+      errorMsg.value = '회의록 내용을 작성해주세요.'
+      return
+    }
+    if (!reportDate.value) {
+      alert('보고 날짜를 지정해 주세요')
+      return
+    }
+    if (!selectedDeptId.value) {
+      errorMsg.value = '사업부를 선택해주세요.'
+      return
+    }
+
     if (hasPendingUploads()) {
       successMsg.value = '이미지 업로드 완료 대기 중...'
       await waitForUploads()
@@ -167,6 +205,40 @@ async function handleSave() {
       <CalendarPicker v-model="reportDate" />
     </div>
 
+    <div class="note-create__stt">
+      <button
+        type="button"
+        class="metro-btn"
+        :class="isRecording ? 'metro-btn--red stt-btn--recording' : 'metro-btn--blue'"
+        :disabled="!sttSupported"
+        :aria-pressed="isRecording"
+        @click="toggleRecording"
+      >
+        <span class="stt-btn__dot" :class="{ 'stt-btn__dot--on': isRecording }"></span>
+        {{ isRecording ? '녹음 중지' : '녹음 시작' }}
+      </button>
+
+      <span v-if="isRecording" class="stt-status" aria-live="polite">
+        말씀하시면 자동으로 받아쓰기됩니다…
+      </span>
+
+      <span v-if="!sttSupported" class="stt-warn">
+        이 브라우저는 음성 인식을 지원하지 않습니다. Chrome 또는 Edge 를 사용해주세요.
+      </span>
+
+      <span v-if="sttSupported" class="stt-notice">
+        음성 인식은 브라우저(구글) 외부 서버를 통해 처리됩니다. 민감한 내용은 녹음하지 마세요.
+      </span>
+    </div>
+
+    <!-- 실시간 자막 (interim 전용, 에디터엔 미반영) -->
+    <div v-if="isRecording || interimText" class="stt-caption" aria-live="polite">
+      <span class="stt-caption__label">실시간 자막</span>
+      <span class="stt-caption__interim">{{ interimText || '…' }}</span>
+    </div>
+
+    <div v-if="sttError" class="stt-error">{{ sttError }}</div>
+
     <div class="note-create__editor">
       <RichEditor v-model="content" />
     </div>
@@ -198,4 +270,28 @@ async function handleSave() {
 .note-create__editor { margin-bottom: 16px; }
 .note-create__error { color: var(--metro-orange); font-size: 14px; font-weight: 600; margin-bottom: 8px; }
 .note-create__success { color: var(--metro-green); font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+
+.note-create__stt { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.stt-btn__dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: middle; opacity: 0.5; }
+.stt-btn__dot--on { opacity: 1; animation: stt-pulse 1s ease-in-out infinite; }
+.stt-btn--recording { animation: stt-glow 1.5s ease-in-out infinite; }
+.stt-status { font-size: 13px; color: var(--metro-text); }
+.stt-warn { font-size: 13px; color: var(--metro-orange); font-weight: 600; }
+.stt-notice { font-size: 12px; color: var(--metro-text); opacity: 0.7; }
+.stt-error { font-size: 13px; color: var(--metro-red); font-weight: 600; margin-bottom: 8px; }
+
+.stt-caption {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 8px 12px; margin-bottom: 12px;
+  background: #f5f5f5; border: 1px dashed var(--metro-border);
+  min-height: 36px;
+}
+.stt-caption__label { font-size: 11px; font-weight: 700; color: var(--metro-blue); flex-shrink: 0; }
+.stt-caption__interim { font-size: 14px; color: #888; font-style: italic; }
+
+@keyframes stt-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.6); } }
+@keyframes stt-glow {
+  0%,100% { box-shadow: 0 0 0 0 rgba(232,17,35,0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(232,17,35,0); }
+}
 </style>
